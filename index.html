@@ -13,11 +13,13 @@
   p { color:var(--muted); line-height:1.5; margin:6px 0 16px; }
   .panel { background:rgba(20,28,47,.94); border:1px solid var(--line); border-radius:18px; padding:16px; margin-top:14px; box-shadow:0 12px 35px #0003; }
   .video-wrap { position:relative; background:#05080e; border-radius:12px; overflow:hidden; min-height:190px; aspect-ratio:4/3; display:grid; place-items:center; }
-  video { width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
+  video { width:100%; height:100%; object-fit:contain; position:absolute; inset:0; }
   canvas { display:none; }
   .overlay { position:absolute; inset:0; border:3px solid transparent; pointer-events:none; }
   .overlay.active { border-color:var(--accent); box-shadow:inset 0 0 0 999px #39d6a20a; }
   .overlay.exit { border-color:var(--exit); box-shadow:inset 0 0 0 999px #ff9a6b0a; }
+  .gate { position:absolute; top:6%; bottom:6%; border:2px dashed #ffffffaa; border-radius:8px; pointer-events:none; background:linear-gradient(90deg,transparent calc(50% - 1px),#ffcb70 calc(50% - 1px),#ffcb70 calc(50% + 1px),transparent calc(50% + 1px)); }
+  .gate span { position:absolute; top:4px; left:50%; transform:translateX(-50%); font-size:12px; font-weight:700; background:#000a; padding:2px 8px; border-radius:99px; white-space:nowrap; }
   .status { display:flex; align-items:center; gap:9px; font-weight:650; margin-top:12px; }
   .dot { width:10px; height:10px; flex:none; border-radius:50%; background:#71809b; }
   .dot.green { background:var(--accent); box-shadow:0 0 12px #39d6a2; }
@@ -53,9 +55,10 @@
   <p>Deixe o celular fixo apontado para a passagem. O sensor registra uma entrada ou uma saída quando uma pessoa atravessa a imagem, conforme o sentido configurado. Ele não identifica rostos.</p>
 
   <section class="panel">
-    <div class="video-wrap">
+    <div class="video-wrap" id="wrap">
       <video id="video" autoplay muted playsinline></video>
       <div class="overlay" id="overlay"></div>
+      <div class="gate" id="gate" hidden><span id="gateLbl"></span></div>
       <span id="placeholder" style="z-index:1;color:#9eacc5;text-align:center;padding:20px">A câmera aparecerá aqui<br>Toque em “Ativar câmera”</span>
     </div>
     <div class="status"><span class="dot" id="dot"></span><span id="status">Câmera desligada</span></div>
@@ -91,11 +94,11 @@
     </select>
     <label for="sensitivity">Sensibilidade: <strong id="sensLabel">18</strong> (menor = detecta mudanças menores)</label>
     <input id="sensitivity" type="range" min="5" max="60" value="18">
-    <label for="travel">Trajeto mínimo para contar: <strong id="travelLabel">20</strong>% da largura da imagem (maior = ignora movimentos curtos)</label>
-    <input id="travel" type="range" min="8" max="60" value="20">
+    <label for="zone">Posição da zona de contagem: <strong id="zoneLabel">50</strong>% (a caixa tracejada no vídeo; cada pessoa precisa atravessá-la inteira)</label>
+    <input id="zone" type="range" min="30" max="70" value="50">
     <label class="check"><input type="checkbox" id="shake" checked> Ignorar quando o celular se mexer (recomendado)</label>
-    <label for="cooldown">Intervalo mínimo entre registros (segundos)</label>
-    <input id="cooldown" type="number" min="0" max="120" value="1">
+    <label for="gap">Separação entre pessoas na fila: <strong id="gapLabel">300</strong> ms (menor = conta pessoas mais coladas, mas pode contar uma pessoa duas vezes)</label>
+    <input id="gap" type="range" min="100" max="800" step="50" value="300">
   </section>
 
   <section class="panel">
@@ -113,13 +116,13 @@
   const video = $('video'), canvas = $('canvas'), ctx = canvas.getContext('2d', {willReadFrequently:true});
   const startBtn = $('start'), monitorBtn = $('monitor'), stopBtn = $('stop');
   const W = canvas.width, H = canvas.height, BX = 8, BY = 6, BW = W/BX, BH = H/BY;
-  const KEY = 'sensor_movimento_v4', CFG = ['dir','sensitivity','travel','shake','cooldown'];
+  const KEY = 'sensor_movimento_v5', CFG = ['dir','sensitivity','zone','gap','shake'];
   let stream = null, monitoring = false, raf = 0, previous = null, lastEventAt = 0, lastCT = -1;
-  let logs = [], motionStreak = 0, quietStreak = 0, active = false, counted = false, startCx = 0, curCx = 0;
+  let logs = [], holdMsgUntil = 0;
   let ignoreUntil = 0, blocked = false;
 
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) || '{}');
+    const s = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('sensor_movimento_v4') || '{}');
     if (Array.isArray(s.logs)) logs = s.logs;
     if (s.cfg) CFG.forEach(k => { if (s.cfg[k] != null) { if (k === 'shake') $(k).checked = !!s.cfg[k]; else $(k).value = s.cfg[k]; } });
   } catch (e) {}
@@ -164,6 +167,7 @@
       stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:640}, height:{ideal:480}}, audio:false});
       video.srcObject = stream;
       await video.play();
+      $('wrap').style.aspectRatio = (video.videoWidth||4)+'/'+(video.videoHeight||3); $('gate').hidden = false;
       $('placeholder').style.display = 'none';
       startBtn.disabled = true; monitorBtn.disabled = false; stopBtn.disabled = false;
       setStatus('Câmera ativa — pronta para iniciar', 'green');
@@ -177,21 +181,39 @@
       }
     }
   }
-  function register(ratio) {
-    const now = Date.now(), cd = Math.max(0, Number($('cooldown').value) || 0) * 1000;
-    if (now - lastEventAt < cd) return;
-    const rightward = curCx > startCx, entryRight = $('dir').value === 'lr';
-    const isEntry = rightward === entryRight;
-    lastEventAt = now;
+  const BAND_THR = 5, WIN = 1500;
+  let bandA = {on:false,streak:0,last:0}, bandB = {on:false,streak:0,last:0}, qA = [], qB = [], lastLabel = '';
+  function label(t, m) { if (t !== lastLabel) { lastLabel = t; setStatus(t, m); } }
+  function updateGate() {
+    $('gate').style.left = (Number($('zone').value) - 20) + '%'; $('gate').style.width = '40%';
+    $('gateLbl').textContent = $('dir').value === 'lr' ? 'Entrada →' : '← Entrada';
+  }
+  function countPass(rightward, ratio) {
+    const isEntry = rightward === ($('dir').value === 'lr');
     addLog(isEntry ? 'Entrada' : 'Saída', ratio);
     setOverlay(isEntry ? 'active' : 'exit');
-    setStatus(isEntry ? 'Entrada registrada' : 'Saída registrada', 'green');
+    setTimeout(() => { if (monitoring) setOverlay(''); }, 700);
+    holdMsgUntil = Date.now() + 1500; lastLabel = '';
+    label(isEntry ? 'Entrada registrada' : 'Saída registrada', 'green');
     if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) {}
   }
-  function resetMotion() { active = false; counted = false; motionStreak = 0; quietStreak = 0; setOverlay(''); }
+  // Cada pessoa gera um pulso de movimento na faixa A (esquerda) e outra na B (direita).
+  // A ordem dos pulsos dá o sentido; cada par A→B ou B→A é uma pessoa.
+  function pulse(side, now, ratio) {
+    qA = qA.filter(t => now - t < WIN); qB = qB.filter(t => now - t < WIN);
+    if (side === 'B') { if (qA.length) { qA.shift(); countPass(true, ratio); } else qB.push(now); }
+    else { if (qB.length) { qB.shift(); countPass(false, ratio); } else qA.push(now); }
+  }
+  function bandStep(b, raw, now, hold) {
+    if (raw) { b.streak++; b.last = now; if (!b.on && b.streak >= 2) { b.on = true; return true; } }
+    else { b.streak = 0; if (b.on && now - b.last >= hold) b.on = false; }
+    return false;
+  }
+  function resetMotion() {
+    bandA = {on:false,streak:0,last:0}; bandB = {on:false,streak:0,last:0}; qA = []; qB = []; setOverlay('');
+  }
   function frame() {
     if (!monitoring) return;
-    // Pula quadros repetidos para comparar apenas imagens novas da câmera.
     if (video.readyState >= 2 && video.currentTime !== lastCT) {
       lastCT = video.currentTime;
       ctx.drawImage(video, 0, 0, W, H);
@@ -199,38 +221,31 @@
       const gray = new Uint8Array(W*H);
       for (let i=0,p=0; i<data.length; i+=4,p++) gray[p] = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114)|0;
       if (previous) {
-        const th = Number($('sensitivity').value);
-        let changed=0, sumX=0, samples=0;
+        const th = Number($('sensitivity').value), c = Number($('zone').value)/100;
+        const aX0 = W*(c-.20), aX1 = W*(c-.03), bX0 = W*(c+.03), bX1 = W*(c+.20);
+        let changed=0, samples=0, aC=0, aS=0, bC=0, bS=0;
         const blocks = new Uint16Array(BX*BY);
-        // Ignora uma borda para reduzir falsos positivos nas laterais.
         for (let y=6;y<H-6;y+=2) for (let x=6;x<W-6;x+=2) {
           samples++;
-          const p=y*W+x;
-          if (Math.abs(gray[p]-previous[p]) > th) { changed++; sumX+=x; blocks[((y/BH)|0)*BX+((x/BW)|0)]++; }
+          const p=y*W+x, hit = Math.abs(gray[p]-previous[p]) > th;
+          if (hit) { changed++; blocks[((y/BH)|0)*BX+((x/BW)|0)]++; }
+          if (x>=aX0 && x<aX1) { aS++; if (hit) aC++; } else if (x>=bX0 && x<bX1) { bS++; if (hit) bC++; }
         }
-        const ratio = changed/samples*100;
-        const cx = changed ? sumX/changed/W : 0.5;
+        const ratio = changed/samples*100, now = Date.now();
         let covered = 0; blocks.forEach(b => { if (b >= 10) covered++; });
-        const now = Date.now();
-        // Celular se mexendo: a imagem inteira muda de uma vez, bem diferente de uma pessoa passando.
+        // Celular se mexendo: a imagem inteira muda de uma vez.
         const shaking = $('shake').checked && (ratio > 60 || (ratio > 20 && covered >= BX*BY*0.8));
         if (shaking) ignoreUntil = now + 1200;
-        const isBlocked = now < ignoreUntil;
-        if (isBlocked) {
-          if (!blocked) { blocked = true; resetMotion(); setStatus(shaking ? 'Celular em movimento — ignorando' : 'Estabilizando imagem…', 'yellow'); }
-          else if (shaking) setStatus('Celular em movimento — ignorando', 'yellow');
+        if (now < ignoreUntil) {
+          if (!blocked) { blocked = true; resetMotion(); }
+          label(shaking ? 'Celular em movimento — ignorando' : 'Estabilizando imagem…', 'yellow');
         } else {
-          if (blocked) { blocked = false; resetMotion(); setStatus('Monitorando passagem…', 'green'); }
-          if (ratio > 2.4) { motionStreak++; quietStreak = 0; } else { quietStreak++; motionStreak = 0; }
-          if (ratio > 2.4) {
-            if (active) curCx = curCx*0.5 + cx*0.5;
-            else if (motionStreak >= 2) { active = true; counted = false; startCx = curCx = cx; setStatus('Movimento detectado…', 'green'); }
-            // Só conta quando o movimento atravessa uma parte suficiente da imagem.
-            if (active && !counted && Math.abs(curCx - startCx) >= Number($('travel').value)/100) {
-              counted = true; register(ratio);
-            }
-          }
-          if (quietStreak >= 5 && active) { resetMotion(); setStatus('Monitorando passagem…', 'green'); }
+          if (blocked) { blocked = false; resetMotion(); }
+          const hold = Number($('gap').value);
+          const ra = bandStep(bandA, aS && aC/aS*100 >= BAND_THR, now, hold);
+          const rb = bandStep(bandB, bS && bC/bS*100 >= BAND_THR, now, hold);
+          if (ra && !rb) pulse('A', now, ratio); else if (rb && !ra) pulse('B', now, ratio);
+          if (now > holdMsgUntil) label((bandA.on || bandB.on) ? 'Movimento na zona de contagem…' : 'Monitorando passagem…', 'green');
         }
       }
       previous = gray;
@@ -240,10 +255,9 @@
   function startMonitor() {
     if (!stream) return;
     monitoring = true; previous = null; lastCT = -1; blocked = false; resetMotion();
-    // Espera o celular parar de se mexer depois do toque no botão.
-    ignoreUntil = Date.now() + 2000; lastEventAt = 0;
+    ignoreUntil = Date.now() + 2000;
     monitorBtn.disabled = true; startBtn.disabled = true;
-    setStatus('Estabilizando imagem… solte o celular', 'yellow');
+    lastLabel = ''; label('Estabilizando imagem… solte o celular', 'yellow');
     raf = requestAnimationFrame(frame);
   }
   function stopAll() {
@@ -251,15 +265,16 @@
     if (stream) stream.getTracks().forEach(t => t.stop());
     stream = null; video.srcObject = null; previous = null; resetMotion();
     startBtn.disabled = false; monitorBtn.disabled = true; stopBtn.disabled = true;
-    $('placeholder').style.display = 'block';
+    $('placeholder').style.display = 'block'; $('gate').hidden = true; $('wrap').style.aspectRatio = '4/3';
     setStatus('Câmera desligada');
   }
   startBtn.addEventListener('click', startCamera);
   monitorBtn.addEventListener('click', startMonitor);
   stopBtn.addEventListener('click', stopAll);
   $('sensitivity').addEventListener('input', e => { $('sensLabel').textContent = e.target.value; save(); });
-  $('travel').addEventListener('input', e => { $('travelLabel').textContent = e.target.value; save(); });
-  ['dir','shake','cooldown'].forEach(k => $(k).addEventListener('change', save));
+  $('zone').addEventListener('input', e => { $('zoneLabel').textContent = e.target.value; updateGate(); save(); });
+  $('gap').addEventListener('input', e => { $('gapLabel').textContent = e.target.value; save(); });
+  ['dir','shake'].forEach(k => $(k).addEventListener('change', () => { updateGate(); save(); }));
   $('undo').addEventListener('click', () => { logs.shift(); save(); render(); });
   $('clear').addEventListener('click', () => {
     if (confirm('Apagar todas as contagens e o histórico deste aparelho?')) { logs = []; lastEventAt = 0; save(); render(); }
@@ -272,7 +287,7 @@
     a.href = url; a.download = 'registros_movimento.csv'; a.click(); URL.revokeObjectURL(url);
   });
   window.addEventListener('pagehide', () => { if (stream) stream.getTracks().forEach(t => t.stop()); });
-  $('sensLabel').textContent = $('sensitivity').value; $('travelLabel').textContent = $('travel').value;
+  $('sensLabel').textContent = $('sensitivity').value; $('zoneLabel').textContent = $('zone').value; $('gapLabel').textContent = $('gap').value; updateGate();
   render();
 })();
 </script>
