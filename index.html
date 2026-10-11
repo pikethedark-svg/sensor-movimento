@@ -3,335 +3,212 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14181f">
-<title>Contador de passagem</title>
+<title>Sensor de Movimento</title>
 <style>
-:root{--bg:#f3f1ec;--panel:#fff;--line:#d9d5cb;--text:#1b1f27;--muted:#5f6675;--in:#0b7a55;--out:#b5471b;--accent:#1b1f27;--accent-text:#fff;--soft:#ebe8e0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media(prefers-color-scheme:dark){:root{--bg:#14181f;--panel:#1d232d;--line:#333c4b;--text:#eef1f6;--muted:#9aa3b5;--in:#4fd3a0;--out:#ff9a6b;--accent:#eef1f6;--accent-text:#14181f;--soft:#262e3b}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:720px;margin:auto;padding:16px 14px 40px}
-h1{font-size:1.35rem;margin:0 0 2px}h2{font-size:1rem;margin:0 0 10px}
-.sub{color:var(--muted);margin:0 0 14px;font-size:.92rem}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
-.cam{position:relative;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;display:grid;place-items:center;color:#aab}
-.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
-.cam .msg{position:relative;text-align:center;padding:16px;font-size:.95rem}
-.status{margin:10px 0 0;font-weight:600;min-height:1.4em}
-.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-button,select{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--soft);color:var(--text);border-radius:10px;padding:11px 14px;cursor:pointer;max-width:100%}
-button.main{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
-button:disabled{opacity:.4;cursor:not-allowed}
-button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--in);outline-offset:2px}
-.counts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
-.counts div{background:var(--soft);border-radius:12px;padding:12px 4px}
-.counts b{display:block;font-size:2.4rem;line-height:1.1;font-variant-numeric:tabular-nums}
-.counts span{font-size:.82rem;color:var(--muted)}
-#cin{color:var(--in)}#cout{color:var(--out)}
-label{display:block;font-size:.9rem;color:var(--muted);margin:14px 0 6px}
-input[type=range]{width:100%}
-.wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:.9rem}
-th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
-th{color:var(--muted);font-weight:600}
-.empty{text-align:center;color:var(--muted);padding:18px}
-.tag-in{color:var(--in);font-weight:700}.tag-out{color:var(--out);font-weight:700}
-.note{font-size:.82rem;color:var(--muted)}
+  :root { color-scheme: dark; --bg:#0b1020; --panel:#141c2f; --line:#293550; --text:#edf3ff; --muted:#9eacc5; --accent:#39d6a2; --warn:#ffcb70; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(ellipse at top,#182747 0,#0b1020 58%); color:var(--text); font:16px system-ui,-apple-system,Segoe UI,sans-serif; min-height:100vh; }
+  main { max-width:900px; margin:auto; padding:20px 14px 36px; }
+  h1 { margin:0 0 6px; font-size:clamp(1.6rem,5vw,2.25rem); }
+  p { color:var(--muted); line-height:1.5; margin:6px 0 16px; }
+  .panel { background:rgba(20,28,47,.94); border:1px solid var(--line); border-radius:18px; padding:16px; margin-top:14px; box-shadow:0 12px 35px #0003; }
+  .video-wrap { position:relative; background:#05080e; border-radius:12px; overflow:hidden; min-height:190px; aspect-ratio:4/3; display:grid; place-items:center; }
+  video { width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
+  canvas { display:none; }
+  .overlay { position:absolute; inset:0; border:2px solid transparent; pointer-events:none; }
+  .overlay.active { border-color:var(--accent); box-shadow:inset 0 0 0 999px #39d6a20a; }
+  .status { display:flex; align-items:center; gap:9px; font-weight:650; margin-top:12px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#71809b; }
+  .dot.green { background:var(--accent); box-shadow:0 0 12px #39d6a2; }
+  .dot.yellow { background:var(--warn); }
+  .buttons { display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; }
+  button { border:1px solid var(--line); border-radius:11px; padding:12px 15px; background:#202c45; color:var(--text); font-weight:700; font-size:15px; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#06251c; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .stat { background:#0e1628; padding:13px; border-radius:12px; border:1px solid var(--line); }
+  .stat small { display:block; color:var(--muted); margin-bottom:5px; }
+  .stat strong { font-size:1.65rem; }
+  label { display:block; font-size:14px; color:var(--muted); margin:12px 0 6px; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  input[type=number] { width:90px; background:#0e1628; border:1px solid var(--line); color:var(--text); padding:8px; border-radius:8px; }
+  .log-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { padding:10px 7px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; }
+  .empty { text-align:center; color:var(--muted); padding:20px 8px; }
+  .note { font-size:13px; }
+  .pill { display:inline-block; border:1px solid var(--line); padding:3px 8px; border-radius:99px; font-size:12px; color:var(--muted); }
+  @media(min-width:650px){ .stats { grid-template-columns:repeat(4,minmax(0,1fr)); } main{padding-top:30px;} }
 </style>
 </head>
 <body>
 <main>
-  <h1>Contador de passagem</h1>
-  <p class="sub">Toda vez que uma pessoa cruza a linha amarela, o app registra uma entrada ou uma saída, conforme o sentido.</p>
+  <h1>📷 Sensor de movimento</h1>
+  <p>Deixe o celular fixo apontado para a passagem. O sensor compara imagens da câmera e registra eventos quando detecta movimento suficiente. Ele não identifica rostos nem garante contar cada pessoa individualmente.</p>
 
-  <section class="card">
-    <div class="cam" id="cam">
+  <section class="panel">
+    <div class="video-wrap">
       <video id="video" autoplay muted playsinline></video>
-      <canvas id="ov"></canvas>
-      <div class="msg" id="placeholder">Toque em “Ligar câmera” para começar.</div>
+      <div class="overlay" id="overlay"></div>
+      <span id="placeholder" style="z-index:1;color:#9eacc5;text-align:center;padding:20px">A câmera aparecerá aqui<br>Toque em “Ativar câmera”</span>
     </div>
-    <p class="status" id="status" role="status">Câmera desligada.</p>
-    <div class="row">
-      <button class="main" id="btnCam">Ligar câmera</button>
-      <button id="btnMon" disabled>Iniciar contagem</button>
-      <button id="btnStop" disabled>Parar</button>
+    <div class="status"><span class="dot" id="dot"></span><span id="status">Câmera desligada</span></div>
+    <div class="buttons">
+      <button class="primary" id="start">Ativar câmera</button>
+      <button id="monitor" disabled>Iniciar contagem</button>
+      <button id="stop" disabled>Parar</button>
     </div>
-    <p class="note">Coloque o celular fixo, de preferência no alto, e posicione a linha amarela no meio da passagem. Durante a contagem, cada pessoa detectada aparece dentro de uma caixa numerada.</p>
+    <p class="note">Dica: apoie o celular, mantenha a iluminação estável e evite apontar para telas, árvores ao vento ou locais com mudanças constantes.</p>
   </section>
 
-  <section class="card">
-    <div class="counts">
-      <div><b id="cin">0</b><span>Entradas</span></div>
-      <div><b id="cout">0</b><span>Saídas</span></div>
-      <div><b id="cnow">0</b><span>Dentro agora</span></div>
+  <section class="panel">
+    <h2 style="margin:0 0 12px;font-size:1.15rem">Contagem de entradas</h2>
+    <div class="stats">
+      <div class="stat"><small>Entradas registradas</small><strong id="total">0</strong></div>
+      <div class="stat"><small>Movimentos detectados</small><strong id="events">0</strong></div>
+      <div class="stat"><small>Início da sessão</small><strong id="session">—</strong></div>
+      <div class="stat"><small>Último evento</small><strong id="last" style="font-size:1rem">—</strong></div>
     </div>
-    <div class="row">
-      <button id="btnAddIn">+1 entrada</button>
-      <button id="btnAddOut">+1 saída</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Ajustes</h2>
-    <label for="eng">Detector</label>
-    <select id="eng">
-      <option value="auto">Automático (usa IA e, se falhar, movimento)</option>
-      <option value="motion">Somente movimento (não precisa de internet)</option>
-      <option value="ai">Somente IA de pessoas</option>
-    </select>
-    <label for="orient">Direção da linha de contagem</label>
-    <select id="orient">
-      <option value="h">Linha horizontal (pessoas passam de cima para baixo na imagem)</option>
-      <option value="v">Linha vertical (pessoas passam de lado a lado na imagem)</option>
-    </select>
-    <label for="line">Posição da linha: <strong id="lineV">50</strong>%</label>
-    <input id="line" type="range" min="15" max="85" value="50">
-    <label for="dir">Conta como entrada quando a pessoa cruza…</label>
-    <select id="dir"></select>
-    <label for="sens">Sensibilidade ao movimento: <strong id="sensV">18</strong> (menor detecta mais)</label>
-    <input id="sens" type="range" min="6" max="50" value="18">
-    <label for="minA">Tamanho mínimo de uma pessoa: <strong id="minAV">1</strong>% da imagem (menor detecta pessoas mais longe)</label>
-    <input id="minA" type="range" min="0.2" max="10" step="0.2" value="1">
-    <label for="conf">Confiança mínima da IA: <strong id="confV">50</strong>%</label>
-    <input id="conf" type="range" min="50" max="90" value="50">
-    <label for="mdl">Modelo da IA</label>
-    <select id="mdl">
-      <option value="lite_mobilenet_v2">Rápido</option>
-      <option value="mobilenet_v2">Preciso (mais lento)</option>
-    </select>
-  </section>
-
-  <section class="card">
-    <div class="row" style="margin:0 0 10px;justify-content:space-between;align-items:center">
-      <h2 style="margin:0">Histórico</h2><span class="note" id="logCount">0 registros</span>
-    </div>
-    <div class="wrap"><table><thead><tr><th>#</th><th>Data e hora</th><th>Evento</th></tr></thead><tbody id="logs"></tbody></table></div>
-    <div class="row">
-      <button id="btnExp">Exportar CSV</button>
-      <button id="btnUndo">Desfazer último</button>
-      <button id="btnClr">Zerar tudo</button>
+    <label for="sensitivity">Sensibilidade: <strong id="sensLabel">18</strong> (menor = detecta mudanças menores)</label>
+    <input id="sensitivity" type="range" min="5" max="60" value="18">
+    <label for="cooldown">Intervalo mínimo entre registros (segundos)</label>
+    <input id="cooldown" type="number" min="1" max="120" value="3">
+    <div class="buttons">
+      <button id="export">Exportar CSV</button>
+      <button id="clear">Zerar contagem e histórico</button>
     </div>
   </section>
 
-  <p class="note">Privacidade: a análise roda no próprio aparelho. Nenhuma imagem é salva ou enviada, e o app não identifica rostos.</p>
+  <section class="panel">
+    <div class="log-head"><h2 style="margin:0;font-size:1.15rem">Histórico de eventos</h2><span class="pill" id="logCount">0 registros</span></div>
+    <div class="table-wrap">
+      <table><thead><tr><th>#</th><th>Horário</th><th>Evento</th><th>Movimento</th></tr></thead><tbody id="logs"><tr><td colspan="4" class="empty">Nenhum evento registrado.</td></tr></tbody></table>
+    </div>
+  </section>
+  <p class="note">Privacidade: o processamento é feito localmente nesta página; imagens não são salvas nem enviadas. Os registros ficam apenas na memória enquanto a página estiver aberta. Para usar a câmera, o navegador pode exigir HTTPS ou localhost; abrir o arquivo diretamente funciona em alguns celulares/navegadores, mas não em todos.</p>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<canvas id="canvas" width="160" height="120"></canvas>
 <script>
-(()=>{
-const $=id=>document.getElementById(id);
-const video=$('video'),ov=$('ov'),oc=ov.getContext('2d');
-const KEY='contador_passagem_v3',CFG=['eng','orient','line','dir','sens','minA','conf','mdl'];
-let model=null,modelKind='',stream=null,mon=false,busy=false,wake=null,engine='motion';
-let tracks=[],nextId=1,logs=[],vw=640,vh=480,fpsN=0,fpsT=0,fps=0,lastM=0,hist=[];
-const MAX_AGE=1200,MW=80,MH=60;
-const mc=document.createElement('canvas');mc.width=MW;mc.height=MH;
-const mctx=mc.getContext('2d',{willReadFrequently:true});
+(() => {
+  const $ = id => document.getElementById(id);
+  const video = $('video'), canvas = $('canvas'), ctx = canvas.getContext('2d', {willReadFrequently:true});
+  const startBtn = $('start'), monitorBtn = $('monitor'), stopBtn = $('stop');
+  let stream = null, monitoring = false, raf = 0, previous = null, lastEventAt = 0;
+  let total = 0, events = 0, logs = [], sessionStart = null, lastMotion = 0, motionStreak = 0, quietStreak = 0, activeMotion = false;
+  const W = canvas.width, H = canvas.height;
 
-try{const s=JSON.parse(localStorage.getItem(KEY)||'{}');logs=Array.isArray(s.logs)?s.logs:[];
- s.cfg&&Object.keys(s.cfg).forEach(k=>{if(CFG.includes(k)&&$(k)&&k!=='dir')$(k).value=s.cfg[k]})}catch(e){}
-function save(){try{const cfg={};CFG.forEach(k=>cfg[k]=$(k).value);localStorage.setItem(KEY,JSON.stringify({logs:logs.slice(-5000),cfg}))}catch(e){}}
-function status(t){$('status').textContent=t}
-function fmt(ts){return new Date(ts).toLocaleString('pt-BR')}
-
-function dirOptions(saved){
- const h=$('orient').value==='h',cur=saved||$('dir').value||'pos';
- $('dir').innerHTML='';
- [['pos',h?'a linha de cima para baixo':'a linha da esquerda para a direita'],['neg',h?'a linha de baixo para cima':'a linha da direita para a esquerda']]
-  .forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;$('dir').appendChild(o)});
- $('dir').value=cur;
-}
-function render(){
- const i=logs.filter(l=>l.t==='in').length,o=logs.filter(l=>l.t==='out').length;
- $('cin').textContent=i;$('cout').textContent=o;$('cnow').textContent=Math.max(0,i-o);
- $('logCount').textContent=logs.length+(logs.length===1?' registro':' registros');
- const tb=$('logs');tb.replaceChildren();
- if(!logs.length){tb.innerHTML='<tr><td colspan="3" class="empty">Nenhuma passagem registrada ainda.</td></tr>';return}
- logs.slice(-100).reverse().forEach((l,k)=>{
-  const tr=document.createElement('tr');
-  [String(logs.length-k),fmt(l.ts),l.t==='in'?'Entrada':'Saída'].forEach((v,j)=>{const td=document.createElement('td');td.textContent=v;if(j===2)td.className=l.t==='in'?'tag-in':'tag-out';tr.appendChild(td)});
-  tb.appendChild(tr)});
-}
-function add(t,manual){
- logs.push({t,ts:Date.now()});save();render();
- if(!manual&&navigator.vibrate)try{navigator.vibrate(30)}catch(e){}
-}
-
-/* ---------- detector de IA ---------- */
-async function loadModel(){
- const kind=$('mdl').value;
- if(model&&modelKind===kind)return true;
- if(!window.cocoSsd||!window.tf){status('Detector de IA indisponível (sem internet?).');return false}
- status('Carregando detector de pessoas…');
- try{
-  try{await tf.setBackend('webgl');await tf.ready()}catch(e){await tf.setBackend('cpu');await tf.ready()}
-  model=await Promise.race([cocoSsd.load({base:kind}),new Promise((_,r)=>setTimeout(()=>r(new Error('tempo esgotado')),30000))]);
-  await model.detect(video,3);modelKind=kind;return true;
- }catch(e){model=null;status('IA indisponível ('+(e.message||e)+').');return false}
-}
-async function aiDets(){
- const p=await model.detect(video,30),minS=Number($('conf').value)/100,minArea=vw*vh*Number($('minA').value)/100;
- return p.filter(o=>o.class==='person'&&o.score>=minS&&o.bbox[2]*o.bbox[3]>=minArea)
-  .map(o=>({x:o.bbox[0]+o.bbox[2]/2,y:o.bbox[1]+o.bbox[3]/2,w:o.bbox[2],h:o.bbox[3]}));
-}
-
-/* ---------- detector por movimento ---------- */
-function dilate(m){
- const o=new Uint8Array(m.length);
- for(let y=1;y<MH-1;y++)for(let x=1;x<MW-1;x++){const p=y*MW+x;if(m[p]||m[p-1]||m[p+1]||m[p-MW]||m[p+MW])o[p]=1}
- return o;
-}
-function motionDets(){
- mctx.drawImage(video,0,0,MW,MH);
- const d=mctx.getImageData(0,0,MW,MH).data,g=new Uint8Array(MW*MH);
- for(let i=0,p=0;i<d.length;i+=4,p++)g[p]=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)|0;
- hist.push(g);if(hist.length>3)hist.shift();
- if(hist.length<3)return [];
- const ref=hist[0],th=Number($('sens').value);
- let m=new Uint8Array(MW*MH);
- for(let p=0;p<m.length;p++)m[p]=Math.abs(g[p]-ref[p])>th?1:0;
- m=dilate(dilate(m));
- const seen=new Uint8Array(MW*MH),out=[],minCells=MW*MH*Number($('minA').value)/100,sx=vw/MW,sy=vh/MH;
- for(let s=0;s<m.length;s++){
-  if(!m[s]||seen[s])continue;
-  const st=[s];seen[s]=1;let n=0,x0=MW,x1=0,y0=MH,y1=0;
-  while(st.length){
-   const p=st.pop(),x=p%MW,y=(p/MW)|0;n++;
-   if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
-   [p-1,p+1,p-MW,p+MW].forEach(q=>{if(q>=0&&q<m.length&&m[q]&&!seen[q]&&Math.abs((q%MW)-x)<=1){seen[q]=1;st.push(q)}});
+  function setStatus(text, mode='') { $('status').textContent = text; $('dot').className = 'dot' + (mode ? ' '+mode : ''); }
+  function timeString(date=new Date()) { return date.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+  function render() {
+    $('total').textContent = total; $('events').textContent = events;
+    $('session').textContent = sessionStart ? sessionStart.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+    $('last').textContent = logs.length ? logs[0].time : '—';
+    $('logCount').textContent = `${logs.length} registro${logs.length===1?'':'s'}`;
+    const tbody = $('logs');
+    if (!logs.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Nenhum evento registrado.</td></tr>'; return; }
+    tbody.replaceChildren();
+    logs.slice(0,100).forEach((item,i) => {
+      const tr = document.createElement('tr');
+      [String(logs.length-i), item.time, item.type, item.motion+'%'].forEach(v => { const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
   }
-  if(n<minCells)continue;
-  const w=(x1-x0+1)*sx,h=(y1-y0+1)*sy,cy=(y0+(y1-y0+1)/2)*sy;
-  const k=w/h>1.4?Math.min(3,Math.round(w/(h*.6))):1;
-  for(let i=0;i<Math.max(1,k);i++)out.push({x:(x0*sx)+w/Math.max(1,k)*(i+.5),y:cy,w:w/Math.max(1,k),h});
- }
- return out;
-}
-
-/* ---------- rastreamento e contagem ---------- */
-function posOf(t){return $('orient').value==='h'?t.y/vh:t.x/vw}
-function sideOf(t,prev){const s=posOf(t)-Number($('line').value)/100,m=0.012;return s>m?1:s<-m?-1:prev}
-function cross(t){
- const s=sideOf(t,t.side);
- if(t.side!==0&&s!==0&&s!==t.side&&t.hits>=2){
-  const entry=(s===1)===($('dir').value==='pos');
-  add(entry?'in':'out');t.flash=performance.now()+800;t.dirIn=entry;
- }
- t.side=s;
-}
-function update(dets,now){
- const diag=Math.hypot(vw,vh);
- tracks.forEach(t=>{const dt=(now-t.t)/1000;t.px=t.x+t.vx*dt;t.py=t.y+t.vy*dt});
- const pairs=[];
- dets.forEach((d,i)=>tracks.forEach((t,j)=>{
-  const dist=Math.hypot(d.x-t.px,d.y-t.py),lim=Math.max(d.w,d.h,t.w,t.h)*0.9+diag*0.04;
-  if(dist<lim)pairs.push([dist,i,j])}));
- pairs.sort((a,b)=>a[0]-b[0]);
- const du=new Set(),tu=new Set();
- for(const [,i,j] of pairs){
-  if(du.has(i)||tu.has(j))continue;du.add(i);tu.add(j);
-  const d=dets[i],t=tracks[j],dt=Math.max(.03,(now-t.t)/1000);
-  t.vx=.6*t.vx+.4*(d.x-t.x)/dt;t.vy=.6*t.vy+.4*(d.y-t.y)/dt;
-  t.x=d.x;t.y=d.y;t.w=d.w;t.h=d.h;t.t=now;t.hits++;cross(t);
- }
- dets.forEach((d,i)=>{if(du.has(i))return;
-  const t={id:nextId++,x:d.x,y:d.y,w:d.w,h:d.h,vx:0,vy:0,px:d.x,py:d.y,t:now,hits:1,side:0,flash:0};
-  t.side=sideOf(t,0);tracks.push(t)});
- tracks=tracks.filter(t=>now-t.t<MAX_AGE);
-}
-function draw(now){
- oc.clearRect(0,0,vw,vh);
- const u=vw/320,h=$('orient').value==='h',L=Number($('line').value)/100;
- oc.lineWidth=2.5*u;oc.strokeStyle='#ffcb3d';oc.setLineDash([8*u,6*u]);
- oc.beginPath();
- if(h){oc.moveTo(0,L*vh);oc.lineTo(vw,L*vh)}else{oc.moveTo(L*vw,0);oc.lineTo(L*vw,vh)}
- oc.stroke();oc.setLineDash([]);
- oc.font=`${11*u}px system-ui,sans-serif`;
- tracks.forEach(t=>{
-  if(now-t.t>300)return;
-  const on=t.flash>now;
-  oc.strokeStyle=on?(t.dirIn?'#35e0a1':'#ff9a6b'):'#ffffff';
-  oc.lineWidth=(on?3.5:1.5)*u;
-  oc.strokeRect(t.x-t.w/2,t.y-t.h/2,t.w,t.h);
-  oc.fillStyle=oc.strokeStyle;oc.fillText('#'+t.id,t.x-t.w/2+3*u,t.y-t.h/2+12*u);
- });
-}
-async function loop(){
- if(!mon)return;
- const now=performance.now();
- if(!busy&&video.readyState>=2&&(engine==='ai'||now-lastM>=66)){
-  busy=true;lastM=now;
-  try{
-   const dets=engine==='ai'?await aiDets():motionDets();
-   update(dets,now);draw(now);
-   fpsN++;if(now-fpsT>1000){fps=fpsN;fpsN=0;fpsT=now}
-   status(`${engine==='ai'?'IA de pessoas':'Detecção por movimento'} · ${fps} quadros/s · ${dets.length} na imagem`);
-  }catch(e){
-   if(engine==='ai'&&$('eng').value==='auto'){engine='motion';hist=[];tracks=[];status('A IA falhou; usando detecção por movimento.')}
-   else status('Erro: '+(e.message||e));
+  function addLog(type, motion) {
+    const now = new Date();
+    logs.unshift({time: now.toLocaleString('pt-BR'), type, motion: Math.round(motion)});
+    if (type === 'Entrada') total++;
+    events++; $('last').textContent = timeString(now); render();
   }
-  busy=false;
- }
- requestAnimationFrame(loop);
-}
-
-/* ---------- câmera ---------- */
-async function camOn(){
- if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){status('Este navegador não permite usar a câmera aqui. Abra o endereço em HTTPS pelo Chrome.');return}
- status('Pedindo permissão da câmera…');
- try{
-  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:960},height:{ideal:720}},audio:false});
-  video.srcObject=stream;await video.play();
-  vw=video.videoWidth||640;vh=video.videoHeight||480;ov.width=vw;ov.height=vh;
-  $('cam').style.aspectRatio=vw+'/'+vh;$('placeholder').style.display='none';
-  $('btnCam').disabled=true;$('btnMon').disabled=false;$('btnStop').disabled=false;
-  draw(0);status('Câmera ligada. Ajuste a linha e toque em “Iniciar contagem”.');
- }catch(e){
-  status(e&&e.name==='NotAllowedError'?'Permissão negada. Libere a câmera nas configurações do site e tente de novo.':'Não foi possível abrir a câmera. Feche outros apps que a usam e tente de novo.');
- }
-}
-async function lock(){try{if('wakeLock' in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}}
-async function monOn(){
- if(!stream)return;
- $('btnMon').disabled=true;tracks=[];hist=[];mon=false;
- const pref=$('eng').value;engine='motion';
- if(pref!=='motion'){
-  if(await loadModel())engine='ai';
-  else if(pref==='ai'){$('btnMon').disabled=false;return}
- }
- mon=true;busy=false;fpsT=performance.now();lock();requestAnimationFrame(loop);
-}
-function stopAll(){
- mon=false;
- if(stream)stream.getTracks().forEach(t=>t.stop());
- stream=null;video.srcObject=null;tracks=[];oc.clearRect(0,0,vw,vh);
- if(wake){try{wake.release()}catch(e){}wake=null}
- $('btnCam').disabled=false;$('btnMon').disabled=true;$('btnStop').disabled=true;
- $('placeholder').style.display='';status('Câmera desligada.');
-}
-
-/* ---------- eventos ---------- */
-$('btnCam').onclick=camOn;$('btnMon').onclick=monOn;$('btnStop').onclick=stopAll;
-$('orient').onchange=()=>{dirOptions();save();if(!mon)draw(0)};
-$('line').oninput=e=>{$('lineV').textContent=e.target.value;save();if(!mon)draw(0)};
-$('sens').oninput=e=>{$('sensV').textContent=e.target.value;save()};
-$('minA').oninput=e=>{$('minAV').textContent=e.target.value;save()};
-$('conf').oninput=e=>{$('confV').textContent=e.target.value;save()};
-['dir','eng','mdl'].forEach(k=>$(k).onchange=()=>{save();if(mon&&k!=='dir'){mon=false;monOn()}});
-$('btnAddIn').onclick=()=>add('in',true);$('btnAddOut').onclick=()=>add('out',true);
-$('btnUndo').onclick=()=>{logs.pop();save();render()};
-$('btnClr').onclick=()=>{if(confirm('Apagar todas as contagens e o histórico deste aparelho?')){logs=[];save();render()}};
-$('btnExp').onclick=()=>{
- const rows=[['Data e hora','Evento'],...logs.map(l=>[fmt(l.ts),l.t==='in'?'Entrada':'Saída'])];
- const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');
- const u=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');
- a.href=u;a.download='passagens.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
-};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&mon)lock()});
-let savedDir;try{savedDir=(JSON.parse(localStorage.getItem(KEY)||'{}').cfg||{}).dir}catch(e){}
-dirOptions(savedDir);
-['line','sens','minA','conf'].forEach(k=>$(k+'V').textContent=$(k).value);
-render();
+  async function startCamera() {
+    // O pedido de permissão precisa ocorrer após o toque do usuário. O pop-up é controlado pelo navegador.
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('O navegador bloqueou o pedido da câmera. Abra esta página em HTTPS ou localhost e tente novamente.', 'yellow');
+      alert('Não foi possível solicitar a câmera neste endereço. Por segurança, o navegador geralmente exige HTTPS (ou localhost). Abra a página por um endereço HTTPS e toque em “Ativar câmera” novamente.');
+      return;
+    }
+    setStatus('Solicitando permissão para usar a câmera…', 'yellow');
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:640}, height:{ideal:480}}, audio:false});
+      video.srcObject = stream;
+      await video.play();
+      $('placeholder').style.display = 'none';
+      startBtn.disabled = true; monitorBtn.disabled = false; stopBtn.disabled = false;
+      setStatus('Câmera ativa — pronta para iniciar', 'green');
+    } catch (e) {
+      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+        setStatus('Permissão negada. Libere a câmera nas permissões do navegador e tente novamente.', 'yellow');
+        alert('O acesso à câmera foi negado ou bloqueado. Toque no ícone ao lado do endereço do site, abra as permissões e permita “Câmera”. Depois, toque em “Ativar câmera” novamente. Se você abriu um arquivo HTML local, tente hospedá-lo em HTTPS.');
+      } else {
+        setStatus('Não foi possível abrir a câmera. Verifique as permissões e tente novamente.', 'yellow');
+        alert('Não foi possível abrir a câmera. Verifique se ela está sendo usada por outro aplicativo e se o navegador tem permissão para acessá-la.');
+      }
+    }
+  }
+  function frame() {
+    if (!monitoring) return;
+    if (video.readyState >= 2) {
+      ctx.drawImage(video, 0, 0, W, H);
+      const data = ctx.getImageData(0,0,W,H).data;
+      const gray = new Uint8Array(W*H);
+      for (let i=0,p=0; i<data.length; i+=4,p++) gray[p] = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114)|0;
+      if (previous) {
+        let changed=0, sum=0;
+        // Ignora uma borda de 5% para reduzir falsos positivos nas laterais.
+        for(let y=6;y<H-6;y+=2) for(let x=6;x<W-6;x+=2) {
+          const p=y*W+x, diff=Math.abs(gray[p]-previous[p]);
+          if(diff > Number($('sensitivity').value)) { changed++; sum+=diff; }
+        }
+        const samples = Math.ceil((W-12)/2)*Math.ceil((H-12)/2);
+        const ratio = changed/samples*100;
+        const threshold = 2.4;
+        if (ratio > threshold) { motionStreak++; quietStreak=0; }
+        else { quietStreak++; motionStreak=0; }
+        if (motionStreak >= 2 && !activeMotion) {
+          activeMotion = true;
+          const now=Date.now(), cooldown=Math.max(1,Math.min(120,Number($('cooldown').value)||3))*1000;
+          if(now-lastEventAt >= cooldown) {
+            lastEventAt=now; addLog('Entrada', ratio); setStatus('Movimento detectado — entrada registrada', 'green');
+            $('overlay').classList.add('active');
+          } else { events++; addLog('Movimento', ratio); setStatus('Movimento detectado (intervalo de segurança)', 'yellow'); }
+        }
+        if (quietStreak >= 5) { activeMotion=false; $('overlay').classList.remove('active'); setStatus('Monitorando passagem…', 'green'); }
+      }
+      previous=gray;
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  function startMonitor() {
+    if (!stream) return;
+    monitoring=true; previous=null; activeMotion=false; motionStreak=quietStreak=0;
+    sessionStart=new Date(); lastEventAt=0;
+    monitorBtn.disabled=true; startBtn.disabled=true;
+    setStatus('Monitorando passagem…', 'green');
+    raf=requestAnimationFrame(frame);
+  }
+  function stopAll() {
+    monitoring=false; cancelAnimationFrame(raf);
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    stream=null; video.srcObject=null; previous=null; activeMotion=false;
+    startBtn.disabled=false; monitorBtn.disabled=true; stopBtn.disabled=true;
+    $('placeholder').style.display='block'; $('overlay').classList.remove('active');
+    setStatus('Câmera desligada');
+  }
+  startBtn.addEventListener('click', startCamera);
+  monitorBtn.addEventListener('click', startMonitor);
+  stopBtn.addEventListener('click', stopAll);
+  $('sensitivity').addEventListener('input', e => $('sensLabel').textContent=e.target.value);
+  $('clear').addEventListener('click', () => { total=0; events=0; logs=[]; sessionStart=null; lastEventAt=0; render(); });
+  $('export').addEventListener('click', () => {
+    const rows=[['Horario','Evento','Movimento (%)'],...logs.slice().reverse().map(x=>[x.time,x.type,x.motion])];
+    const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download='registros_movimento.csv'; a.click(); URL.revokeObjectURL(url);
+  });
+  window.addEventListener('pagehide', () => { if(stream) stream.getTracks().forEach(t=>t.stop()); });
+  render();
 })();
 </script>
 </body>
