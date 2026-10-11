@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sensor de Movimento</title>
 <style>
-  :root { color-scheme: dark; --bg:#0b1020; --panel:#141c2f; --line:#293550; --text:#edf3ff; --muted:#9eacc5; --accent:#39d6a2; --warn:#ffcb70; }
+  :root { color-scheme: dark; --bg:#0b1020; --panel:#141c2f; --line:#293550; --text:#edf3ff; --muted:#9eacc5; --accent:#39d6a2; --warn:#ffcb70; --exit:#ff9a6b; }
   * { box-sizing:border-box; }
   body { margin:0; background:radial-gradient(ellipse at top,#182747 0,#0b1020 58%); color:var(--text); font:16px system-ui,-apple-system,Segoe UI,sans-serif; min-height:100vh; }
   main { max-width:900px; margin:auto; padding:20px 14px 36px; }
@@ -15,23 +15,26 @@
   .video-wrap { position:relative; background:#05080e; border-radius:12px; overflow:hidden; min-height:190px; aspect-ratio:4/3; display:grid; place-items:center; }
   video { width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
   canvas { display:none; }
-  .overlay { position:absolute; inset:0; border:2px solid transparent; pointer-events:none; }
+  .overlay { position:absolute; inset:0; border:3px solid transparent; pointer-events:none; }
   .overlay.active { border-color:var(--accent); box-shadow:inset 0 0 0 999px #39d6a20a; }
+  .overlay.exit { border-color:var(--exit); box-shadow:inset 0 0 0 999px #ff9a6b0a; }
   .status { display:flex; align-items:center; gap:9px; font-weight:650; margin-top:12px; }
-  .dot { width:10px; height:10px; border-radius:50%; background:#71809b; }
+  .dot { width:10px; height:10px; flex:none; border-radius:50%; background:#71809b; }
   .dot.green { background:var(--accent); box-shadow:0 0 12px #39d6a2; }
   .dot.yellow { background:var(--warn); }
   .buttons { display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; }
-  button { border:1px solid var(--line); border-radius:11px; padding:12px 15px; background:#202c45; color:var(--text); font-weight:700; font-size:15px; cursor:pointer; }
+  button, select { border:1px solid var(--line); border-radius:11px; padding:12px 15px; background:#202c45; color:var(--text); font-weight:700; font-size:15px; cursor:pointer; max-width:100%; font-family:inherit; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#06251c; }
   button:disabled { opacity:.45; cursor:not-allowed; }
   .stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
   .stat { background:#0e1628; padding:13px; border-radius:12px; border:1px solid var(--line); }
   .stat small { display:block; color:var(--muted); margin-bottom:5px; }
   .stat strong { font-size:1.65rem; }
-  label { display:block; font-size:14px; color:var(--muted); margin:12px 0 6px; }
+  #total { color:var(--accent); } #exits { color:var(--exit); }
+  label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
   input[type=range] { width:100%; accent-color:var(--accent); }
   input[type=number] { width:90px; background:#0e1628; border:1px solid var(--line); color:var(--text); padding:8px; border-radius:8px; }
+  .check { display:flex; gap:9px; align-items:center; color:var(--text); }
   .log-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
   .table-wrap { overflow-x:auto; }
   table { width:100%; border-collapse:collapse; font-size:14px; }
@@ -40,13 +43,14 @@
   .empty { text-align:center; color:var(--muted); padding:20px 8px; }
   .note { font-size:13px; }
   .pill { display:inline-block; border:1px solid var(--line); padding:3px 8px; border-radius:99px; font-size:12px; color:var(--muted); }
+  .in { color:var(--accent); font-weight:700; } .out { color:var(--exit); font-weight:700; }
   @media(min-width:650px){ .stats { grid-template-columns:repeat(4,minmax(0,1fr)); } main{padding-top:30px;} }
 </style>
 </head>
 <body>
 <main>
   <h1>📷 Sensor de movimento</h1>
-  <p>Deixe o celular fixo apontado para a passagem. O sensor compara imagens da câmera e registra eventos quando detecta movimento suficiente. Ele não identifica rostos nem garante contar cada pessoa individualmente.</p>
+  <p>Deixe o celular fixo apontado para a passagem. O sensor registra uma entrada ou uma saída quando uma pessoa atravessa a imagem, conforme o sentido configurado. Ele não identifica rostos.</p>
 
   <section class="panel">
     <div class="video-wrap">
@@ -60,34 +64,47 @@
       <button id="monitor" disabled>Iniciar contagem</button>
       <button id="stop" disabled>Parar</button>
     </div>
-    <p class="note">Dica: apoie o celular, mantenha a iluminação estável e evite apontar para telas, árvores ao vento ou locais com mudanças constantes.</p>
+    <p class="note">Dica: apoie o celular e não encoste nele depois de iniciar. Mantenha a iluminação estável e evite apontar para telas, árvores ao vento ou locais com mudanças constantes.</p>
   </section>
 
   <section class="panel">
-    <h2 style="margin:0 0 12px;font-size:1.15rem">Contagem de entradas</h2>
+    <h2 style="margin:0 0 12px;font-size:1.15rem">Contagem</h2>
     <div class="stats">
-      <div class="stat"><small>Entradas registradas</small><strong id="total">0</strong></div>
-      <div class="stat"><small>Movimentos detectados</small><strong id="events">0</strong></div>
-      <div class="stat"><small>Início da sessão</small><strong id="session">—</strong></div>
+      <div class="stat"><small>Entradas</small><strong id="total">0</strong></div>
+      <div class="stat"><small>Saídas</small><strong id="exits">0</strong></div>
+      <div class="stat"><small>Dentro agora</small><strong id="inside">0</strong></div>
       <div class="stat"><small>Último evento</small><strong id="last" style="font-size:1rem">—</strong></div>
     </div>
-    <label for="sensitivity">Sensibilidade: <strong id="sensLabel">18</strong> (menor = detecta mudanças menores)</label>
-    <input id="sensitivity" type="range" min="5" max="60" value="18">
-    <label for="cooldown">Intervalo mínimo entre registros (segundos)</label>
-    <input id="cooldown" type="number" min="1" max="120" value="3">
     <div class="buttons">
       <button id="export">Exportar CSV</button>
+      <button id="undo">Desfazer último</button>
       <button id="clear">Zerar contagem e histórico</button>
     </div>
   </section>
 
   <section class="panel">
+    <h2 style="margin:0 0 4px;font-size:1.15rem">Configurações</h2>
+    <label for="dir">Conta como <strong>entrada</strong> quando a pessoa passa:</label>
+    <select id="dir">
+      <option value="lr">da esquerda para a direita da imagem</option>
+      <option value="rl">da direita para a esquerda da imagem</option>
+    </select>
+    <label for="sensitivity">Sensibilidade: <strong id="sensLabel">18</strong> (menor = detecta mudanças menores)</label>
+    <input id="sensitivity" type="range" min="5" max="60" value="18">
+    <label for="travel">Trajeto mínimo para contar: <strong id="travelLabel">20</strong>% da largura da imagem (maior = ignora movimentos curtos)</label>
+    <input id="travel" type="range" min="8" max="60" value="20">
+    <label class="check"><input type="checkbox" id="shake" checked> Ignorar quando o celular se mexer (recomendado)</label>
+    <label for="cooldown">Intervalo mínimo entre registros (segundos)</label>
+    <input id="cooldown" type="number" min="0" max="120" value="1">
+  </section>
+
+  <section class="panel">
     <div class="log-head"><h2 style="margin:0;font-size:1.15rem">Histórico de eventos</h2><span class="pill" id="logCount">0 registros</span></div>
     <div class="table-wrap">
-      <table><thead><tr><th>#</th><th>Horário</th><th>Evento</th><th>Movimento</th></tr></thead><tbody id="logs"><tr><td colspan="4" class="empty">Nenhum evento registrado.</td></tr></tbody></table>
+      <table><thead><tr><th>#</th><th>Horário</th><th>Evento</th><th>Movimento</th></tr></thead><tbody id="logs"></tbody></table>
     </div>
   </section>
-  <p class="note">Privacidade: o processamento é feito localmente nesta página; imagens não são salvas nem enviadas. Os registros ficam apenas na memória enquanto a página estiver aberta. Para usar a câmera, o navegador pode exigir HTTPS ou localhost; abrir o arquivo diretamente funciona em alguns celulares/navegadores, mas não em todos.</p>
+  <p class="note">Privacidade: o processamento é feito localmente; imagens não são salvas nem enviadas. A contagem e as configurações ficam salvas apenas neste aparelho.</p>
 </main>
 <canvas id="canvas" width="160" height="120"></canvas>
 <script>
@@ -95,37 +112,51 @@
   const $ = id => document.getElementById(id);
   const video = $('video'), canvas = $('canvas'), ctx = canvas.getContext('2d', {willReadFrequently:true});
   const startBtn = $('start'), monitorBtn = $('monitor'), stopBtn = $('stop');
-  let stream = null, monitoring = false, raf = 0, previous = null, lastEventAt = 0;
-  let total = 0, events = 0, logs = [], sessionStart = null, lastMotion = 0, motionStreak = 0, quietStreak = 0, activeMotion = false;
-  const W = canvas.width, H = canvas.height;
+  const W = canvas.width, H = canvas.height, BX = 8, BY = 6, BW = W/BX, BH = H/BY;
+  const KEY = 'sensor_movimento_v4', CFG = ['dir','sensitivity','travel','shake','cooldown'];
+  let stream = null, monitoring = false, raf = 0, previous = null, lastEventAt = 0, lastCT = -1;
+  let logs = [], motionStreak = 0, quietStreak = 0, active = false, counted = false, startCx = 0, curCx = 0;
+  let ignoreUntil = 0, blocked = false;
 
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (Array.isArray(s.logs)) logs = s.logs;
+    if (s.cfg) CFG.forEach(k => { if (s.cfg[k] != null) { if (k === 'shake') $(k).checked = !!s.cfg[k]; else $(k).value = s.cfg[k]; } });
+  } catch (e) {}
+  function save() {
+    try {
+      const cfg = {}; CFG.forEach(k => cfg[k] = k === 'shake' ? $(k).checked : $(k).value);
+      localStorage.setItem(KEY, JSON.stringify({logs: logs.slice(0,5000), cfg}));
+    } catch (e) {}
+  }
   function setStatus(text, mode='') { $('status').textContent = text; $('dot').className = 'dot' + (mode ? ' '+mode : ''); }
-  function timeString(date=new Date()) { return date.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+  function setOverlay(kind) { $('overlay').className = 'overlay' + (kind ? ' '+kind : ''); }
   function render() {
-    $('total').textContent = total; $('events').textContent = events;
-    $('session').textContent = sessionStart ? sessionStart.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const inn = logs.filter(l => l.type === 'Entrada').length, out = logs.length - inn;
+    $('total').textContent = inn; $('exits').textContent = out; $('inside').textContent = Math.max(0, inn - out);
     $('last').textContent = logs.length ? logs[0].time : '—';
     $('logCount').textContent = `${logs.length} registro${logs.length===1?'':'s'}`;
     const tbody = $('logs');
-    if (!logs.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Nenhum evento registrado.</td></tr>'; return; }
+    if (!logs.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Nenhuma passagem registrada.</td></tr>'; return; }
     tbody.replaceChildren();
     logs.slice(0,100).forEach((item,i) => {
       const tr = document.createElement('tr');
-      [String(logs.length-i), item.time, item.type, item.motion+'%'].forEach(v => { const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+      [String(logs.length-i), item.time, item.type, item.motion+'%'].forEach((v,j) => {
+        const td = document.createElement('td'); td.textContent = v;
+        if (j === 2) td.className = item.type === 'Entrada' ? 'in' : 'out';
+        tr.appendChild(td);
+      });
       tbody.appendChild(tr);
     });
   }
   function addLog(type, motion) {
-    const now = new Date();
-    logs.unshift({time: now.toLocaleString('pt-BR'), type, motion: Math.round(motion)});
-    if (type === 'Entrada') total++;
-    events++; $('last').textContent = timeString(now); render();
+    logs.unshift({time: new Date().toLocaleString('pt-BR'), type, motion: Math.round(motion)});
+    save(); render();
   }
   async function startCamera() {
-    // O pedido de permissão precisa ocorrer após o toque do usuário. O pop-up é controlado pelo navegador.
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setStatus('O navegador bloqueou o pedido da câmera. Abra esta página em HTTPS ou localhost e tente novamente.', 'yellow');
-      alert('Não foi possível solicitar a câmera neste endereço. Por segurança, o navegador geralmente exige HTTPS (ou localhost). Abra a página por um endereço HTTPS e toque em “Ativar câmera” novamente.');
+      setStatus('O navegador bloqueou o pedido da câmera. Abra esta página em HTTPS e tente novamente.', 'yellow');
+      alert('Não foi possível solicitar a câmera neste endereço. Por segurança, o navegador exige HTTPS. Abra a página por um endereço HTTPS e toque em “Ativar câmera” novamente.');
       return;
     }
     setStatus('Solicitando permissão para usar a câmera…', 'yellow');
@@ -139,75 +170,109 @@
     } catch (e) {
       if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
         setStatus('Permissão negada. Libere a câmera nas permissões do navegador e tente novamente.', 'yellow');
-        alert('O acesso à câmera foi negado ou bloqueado. Toque no ícone ao lado do endereço do site, abra as permissões e permita “Câmera”. Depois, toque em “Ativar câmera” novamente. Se você abriu um arquivo HTML local, tente hospedá-lo em HTTPS.');
+        alert('O acesso à câmera foi negado ou bloqueado. Toque no ícone ao lado do endereço do site, abra as permissões e permita “Câmera”. Depois, toque em “Ativar câmera” novamente.');
       } else {
         setStatus('Não foi possível abrir a câmera. Verifique as permissões e tente novamente.', 'yellow');
         alert('Não foi possível abrir a câmera. Verifique se ela está sendo usada por outro aplicativo e se o navegador tem permissão para acessá-la.');
       }
     }
   }
+  function register(ratio) {
+    const now = Date.now(), cd = Math.max(0, Number($('cooldown').value) || 0) * 1000;
+    if (now - lastEventAt < cd) return;
+    const rightward = curCx > startCx, entryRight = $('dir').value === 'lr';
+    const isEntry = rightward === entryRight;
+    lastEventAt = now;
+    addLog(isEntry ? 'Entrada' : 'Saída', ratio);
+    setOverlay(isEntry ? 'active' : 'exit');
+    setStatus(isEntry ? 'Entrada registrada' : 'Saída registrada', 'green');
+    if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) {}
+  }
+  function resetMotion() { active = false; counted = false; motionStreak = 0; quietStreak = 0; setOverlay(''); }
   function frame() {
     if (!monitoring) return;
-    if (video.readyState >= 2) {
+    // Pula quadros repetidos para comparar apenas imagens novas da câmera.
+    if (video.readyState >= 2 && video.currentTime !== lastCT) {
+      lastCT = video.currentTime;
       ctx.drawImage(video, 0, 0, W, H);
       const data = ctx.getImageData(0,0,W,H).data;
       const gray = new Uint8Array(W*H);
       for (let i=0,p=0; i<data.length; i+=4,p++) gray[p] = (data[i]*0.299 + data[i+1]*0.587 + data[i+2]*0.114)|0;
       if (previous) {
-        let changed=0, sum=0;
-        // Ignora uma borda de 5% para reduzir falsos positivos nas laterais.
-        for(let y=6;y<H-6;y+=2) for(let x=6;x<W-6;x+=2) {
-          const p=y*W+x, diff=Math.abs(gray[p]-previous[p]);
-          if(diff > Number($('sensitivity').value)) { changed++; sum+=diff; }
+        const th = Number($('sensitivity').value);
+        let changed=0, sumX=0, samples=0;
+        const blocks = new Uint16Array(BX*BY);
+        // Ignora uma borda para reduzir falsos positivos nas laterais.
+        for (let y=6;y<H-6;y+=2) for (let x=6;x<W-6;x+=2) {
+          samples++;
+          const p=y*W+x;
+          if (Math.abs(gray[p]-previous[p]) > th) { changed++; sumX+=x; blocks[((y/BH)|0)*BX+((x/BW)|0)]++; }
         }
-        const samples = Math.ceil((W-12)/2)*Math.ceil((H-12)/2);
         const ratio = changed/samples*100;
-        const threshold = 2.4;
-        if (ratio > threshold) { motionStreak++; quietStreak=0; }
-        else { quietStreak++; motionStreak=0; }
-        if (motionStreak >= 2 && !activeMotion) {
-          activeMotion = true;
-          const now=Date.now(), cooldown=Math.max(1,Math.min(120,Number($('cooldown').value)||3))*1000;
-          if(now-lastEventAt >= cooldown) {
-            lastEventAt=now; addLog('Entrada', ratio); setStatus('Movimento detectado — entrada registrada', 'green');
-            $('overlay').classList.add('active');
-          } else { events++; addLog('Movimento', ratio); setStatus('Movimento detectado (intervalo de segurança)', 'yellow'); }
+        const cx = changed ? sumX/changed/W : 0.5;
+        let covered = 0; blocks.forEach(b => { if (b >= 10) covered++; });
+        const now = Date.now();
+        // Celular se mexendo: a imagem inteira muda de uma vez, bem diferente de uma pessoa passando.
+        const shaking = $('shake').checked && (ratio > 60 || (ratio > 20 && covered >= BX*BY*0.8));
+        if (shaking) ignoreUntil = now + 1200;
+        const isBlocked = now < ignoreUntil;
+        if (isBlocked) {
+          if (!blocked) { blocked = true; resetMotion(); setStatus(shaking ? 'Celular em movimento — ignorando' : 'Estabilizando imagem…', 'yellow'); }
+          else if (shaking) setStatus('Celular em movimento — ignorando', 'yellow');
+        } else {
+          if (blocked) { blocked = false; resetMotion(); setStatus('Monitorando passagem…', 'green'); }
+          if (ratio > 2.4) { motionStreak++; quietStreak = 0; } else { quietStreak++; motionStreak = 0; }
+          if (ratio > 2.4) {
+            if (active) curCx = curCx*0.5 + cx*0.5;
+            else if (motionStreak >= 2) { active = true; counted = false; startCx = curCx = cx; setStatus('Movimento detectado…', 'green'); }
+            // Só conta quando o movimento atravessa uma parte suficiente da imagem.
+            if (active && !counted && Math.abs(curCx - startCx) >= Number($('travel').value)/100) {
+              counted = true; register(ratio);
+            }
+          }
+          if (quietStreak >= 5 && active) { resetMotion(); setStatus('Monitorando passagem…', 'green'); }
         }
-        if (quietStreak >= 5) { activeMotion=false; $('overlay').classList.remove('active'); setStatus('Monitorando passagem…', 'green'); }
       }
-      previous=gray;
+      previous = gray;
     }
-    raf=requestAnimationFrame(frame);
+    raf = requestAnimationFrame(frame);
   }
   function startMonitor() {
     if (!stream) return;
-    monitoring=true; previous=null; activeMotion=false; motionStreak=quietStreak=0;
-    sessionStart=new Date(); lastEventAt=0;
-    monitorBtn.disabled=true; startBtn.disabled=true;
-    setStatus('Monitorando passagem…', 'green');
-    raf=requestAnimationFrame(frame);
+    monitoring = true; previous = null; lastCT = -1; blocked = false; resetMotion();
+    // Espera o celular parar de se mexer depois do toque no botão.
+    ignoreUntil = Date.now() + 2000; lastEventAt = 0;
+    monitorBtn.disabled = true; startBtn.disabled = true;
+    setStatus('Estabilizando imagem… solte o celular', 'yellow');
+    raf = requestAnimationFrame(frame);
   }
   function stopAll() {
-    monitoring=false; cancelAnimationFrame(raf);
-    if(stream) stream.getTracks().forEach(t=>t.stop());
-    stream=null; video.srcObject=null; previous=null; activeMotion=false;
-    startBtn.disabled=false; monitorBtn.disabled=true; stopBtn.disabled=true;
-    $('placeholder').style.display='block'; $('overlay').classList.remove('active');
+    monitoring = false; cancelAnimationFrame(raf);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null; video.srcObject = null; previous = null; resetMotion();
+    startBtn.disabled = false; monitorBtn.disabled = true; stopBtn.disabled = true;
+    $('placeholder').style.display = 'block';
     setStatus('Câmera desligada');
   }
   startBtn.addEventListener('click', startCamera);
   monitorBtn.addEventListener('click', startMonitor);
   stopBtn.addEventListener('click', stopAll);
-  $('sensitivity').addEventListener('input', e => $('sensLabel').textContent=e.target.value);
-  $('clear').addEventListener('click', () => { total=0; events=0; logs=[]; sessionStart=null; lastEventAt=0; render(); });
-  $('export').addEventListener('click', () => {
-    const rows=[['Horario','Evento','Movimento (%)'],...logs.slice().reverse().map(x=>[x.time,x.type,x.motion])];
-    const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');
-    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-    const url=URL.createObjectURL(blob), a=document.createElement('a');
-    a.href=url; a.download='registros_movimento.csv'; a.click(); URL.revokeObjectURL(url);
+  $('sensitivity').addEventListener('input', e => { $('sensLabel').textContent = e.target.value; save(); });
+  $('travel').addEventListener('input', e => { $('travelLabel').textContent = e.target.value; save(); });
+  ['dir','shake','cooldown'].forEach(k => $(k).addEventListener('change', save));
+  $('undo').addEventListener('click', () => { logs.shift(); save(); render(); });
+  $('clear').addEventListener('click', () => {
+    if (confirm('Apagar todas as contagens e o histórico deste aparelho?')) { logs = []; lastEventAt = 0; save(); render(); }
   });
-  window.addEventListener('pagehide', () => { if(stream) stream.getTracks().forEach(t=>t.stop()); });
+  $('export').addEventListener('click', () => {
+    const rows = [['Horario','Evento','Movimento (%)'], ...logs.slice().reverse().map(x => [x.time, x.type, x.motion])];
+    const csv = '\ufeff' + rows.map(r => r.map(v => '"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = 'registros_movimento.csv'; a.click(); URL.revokeObjectURL(url);
+  });
+  window.addEventListener('pagehide', () => { if (stream) stream.getTracks().forEach(t => t.stop()); });
+  $('sensLabel').textContent = $('sensitivity').value; $('travelLabel').textContent = $('travel').value;
   render();
 })();
 </script>
