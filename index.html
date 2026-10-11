@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14181f">
+<title>Contador de passagem</title>
+<style>
+:root{--bg:#f3f1ec;--panel:#fff;--line:#d9d5cb;--text:#1b1f27;--muted:#5f6675;--in:#0b7a55;--out:#b5471b;--accent:#1b1f27;--accent-text:#fff;--soft:#ebe8e0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{--bg:#14181f;--panel:#1d232d;--line:#333c4b;--text:#eef1f6;--muted:#9aa3b5;--in:#4fd3a0;--out:#ff9a6b;--accent:#eef1f6;--accent-text:#14181f;--soft:#262e3b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:auto;padding:16px 14px 40px}
+h1{font-size:1.35rem;margin:0 0 2px}h2{font-size:1rem;margin:0 0 10px}
+.sub{color:var(--muted);margin:0 0 14px;font-size:.92rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+.cam{position:relative;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;display:grid;place-items:center;color:#aab}
+.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.cam .msg{position:relative;text-align:center;padding:16px;font-size:.95rem}
+.status{margin:10px 0 0;font-weight:600;min-height:1.4em}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+button,select{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--soft);color:var(--text);border-radius:10px;padding:11px 14px;cursor:pointer;max-width:100%}
+button.main{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--in);outline-offset:2px}
+.counts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.counts div{background:var(--soft);border-radius:12px;padding:12px 4px}
+.counts b{display:block;font-size:2.4rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.counts span{font-size:.82rem;color:var(--muted)}
+#cin{color:var(--in)}#cout{color:var(--out)}
+label{display:block;font-size:.9rem;color:var(--muted);margin:14px 0 6px}
+input[type=range]{width:100%}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--muted);font-weight:600}
+.empty{text-align:center;color:var(--muted);padding:18px}
+.tag-in{color:var(--in);font-weight:700}.tag-out{color:var(--out);font-weight:700}
+.note{font-size:.82rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Contador de passagem</h1>
+  <p class="sub">Detecta cada pessoa na imagem, acompanha o trajeto de cada uma e conta quando ela cruza a linha amarela. Várias pessoas ao mesmo tempo são contadas separadamente.</p>
+
+  <section class="card">
+    <div class="cam" id="cam">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="ov"></canvas>
+      <div class="msg" id="placeholder">Toque em “Ligar câmera” para começar.</div>
+    </div>
+    <p class="status" id="status" role="status">Câmera desligada.</p>
+    <div class="row">
+      <button class="main" id="btnCam">Ligar câmera</button>
+      <button id="btnMon" disabled>Iniciar contagem</button>
+      <button id="btnStop" disabled>Parar</button>
+    </div>
+    <p class="note">Posicionamento ideal: celular fixo no alto, olhando a porta de cima para baixo ou em diagonal, com a linha amarela no meio da passagem. Pessoas de frente para a câmera, sem ficar uma atrás da outra, são contadas com mais precisão.</p>
+  </section>
+
+  <section class="card">
+    <div class="counts">
+      <div><b id="cin">0</b><span>Entradas</span></div>
+      <div><b id="cout">0</b><span>Saídas</span></div>
+      <div><b id="cnow">0</b><span>Dentro agora</span></div>
+    </div>
+    <div class="row">
+      <button id="btnAddIn">+1 entrada</button>
+      <button id="btnAddOut">+1 saída</button>
+    </div>
+    <p class="note" style="margin:10px 0 0">Use os botões +1 para corrigir se notar uma falha. Os dados ficam salvos neste aparelho.</p>
+  </section>
+
+  <section class="card">
+    <h2>Ajustes</h2>
+    <label for="orient">Direção da linha de contagem</label>
+    <select id="orient">
+      <option value="h">Linha horizontal (pessoas passam de cima para baixo na imagem)</option>
+      <option value="v">Linha vertical (pessoas passam de lado a lado na imagem)</option>
+    </select>
+    <label for="line">Posição da linha: <strong id="lineV">50</strong>%</label>
+    <input id="line" type="range" min="15" max="85" value="50">
+    <label for="dir">Conta como entrada quando a pessoa cruza…</label>
+    <select id="dir"></select>
+    <label for="mdl">Modelo de detecção</label>
+    <select id="mdl">
+      <option value="mobilenet_v2">Preciso (mais lento, melhor com grupos)</option>
+      <option value="lite_mobilenet_v2">Rápido (para celulares mais fracos)</option>
+    </select>
+    <label for="conf">Confiança mínima: <strong id="confV">55</strong>% (maior evita falsos positivos)</label>
+    <input id="conf" type="range" min="50" max="90" value="55">
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin:0 0 10px;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Histórico</h2><span class="note" id="logCount">0 registros</span>
+    </div>
+    <div class="wrap"><table><thead><tr><th>#</th><th>Data e hora</th><th>Evento</th></tr></thead><tbody id="logs"></tbody></table></div>
+    <div class="row">
+      <button id="btnExp">Exportar CSV</button>
+      <button id="btnUndo">Desfazer último</button>
+      <button id="btnClr">Zerar tudo</button>
+    </div>
+  </section>
+
+  <p class="note">Privacidade: a análise roda no próprio aparelho. Nenhuma imagem é salva ou enviada, e o app não identifica rostos. A internet é usada apenas para baixar o detector na primeira vez.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const video=$('video'),ov=$('ov'),oc=ov.getContext('2d');
+const KEY='contador_passagem_v2',CFG=['orient','line','dir','mdl','conf'];
+let model=null,modelKind='',stream=null,mon=false,busy=false,wake=null;
+let tracks=[],nextId=1,logs=[],vw=640,vh=480,fpsN=0,fpsT=0,fps=0;
+const MAX_AGE=1000;
+
+try{const s=JSON.parse(localStorage.getItem(KEY)||'{}');logs=Array.isArray(s.logs)?s.logs:[];
+ s.cfg&&Object.keys(s.cfg).forEach(k=>{if(CFG.includes(k)&&$(k))$(k).value=s.cfg[k]})}catch(e){}
+function save(){try{const cfg={};CFG.forEach(k=>cfg[k]=$(k).value);localStorage.setItem(KEY,JSON.stringify({logs:logs.slice(-5000),cfg}))}catch(e){}}
+function status(t){$('status').textContent=t}
+function fmt(ts){return new Date(ts).toLocaleString('pt-BR')}
+
+function dirOptions(){
+ const h=$('orient').value==='h',cur=$('dir').value||'pos';
+ $('dir').innerHTML='';
+ [['pos',h?'a linha de cima para baixo':'a linha da esquerda para a direita'],['neg',h?'a linha de baixo para cima':'a linha da direita para a esquerda']]
+  .forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;$('dir').appendChild(o)});
+ $('dir').value=cur;
+}
+function render(){
+ const i=logs.filter(l=>l.t==='in').length,o=logs.filter(l=>l.t==='out').length;
+ $('cin').textContent=i;$('cout').textContent=o;$('cnow').textContent=Math.max(0,i-o);
+ $('logCount').textContent=logs.length+(logs.length===1?' registro':' registros');
+ const tb=$('logs');tb.replaceChildren();
+ if(!logs.length){tb.innerHTML='<tr><td colspan="3" class="empty">Nenhuma passagem registrada ainda.</td></tr>';return}
+ logs.slice(-100).reverse().forEach((l,k)=>{
+  const tr=document.createElement('tr');
+  [String(logs.length-k),fmt(l.ts),l.t==='in'?'Entrada':'Saída'].forEach((v,j)=>{const td=document.createElement('td');td.textContent=v;if(j===2)td.className=l.t==='in'?'tag-in':'tag-out';tr.appendChild(td)});
+  tb.appendChild(tr)});
+}
+function add(t,manual){
+ logs.push({t,ts:Date.now()});save();render();
+ if(!manual&&navigator.vibrate)try{navigator.vibrate(30)}catch(e){}
+}
+
+async function loadModel(){
+ const kind=$('mdl').value;
+ if(model&&modelKind===kind)return true;
+ if(!window.cocoSsd){status('Não foi possível carregar o detector. Conecte-se à internet e recarregue a página.');return false}
+ status('Carregando detector de pessoas… (apenas na primeira vez)');
+ try{model=await cocoSsd.load({base:kind});modelKind=kind;return true}
+ catch(e){status('Falha ao baixar o modelo. Verifique a internet e tente de novo.');return false}
+}
+
+/* ---------- rastreamento e contagem ---------- */
+function posOf(t){return $('orient').value==='h'?t.y/vh:t.x/vw}
+function sideOf(t,prev){const s=posOf(t)-Number($('line').value)/100,m=0.02;return s>m?1:s<-m?-1:prev}
+function cross(t){
+ const s=sideOf(t,t.side);
+ if(t.side!==0&&s!==0&&s!==t.side&&t.hits>=3){
+  const entry=(s===1)===($('dir').value==='pos');
+  add(entry?'in':'out');t.flash=performance.now()+700;t.dirIn=entry;
+ }
+ t.side=s;
+}
+function update(dets,now){
+ const diag=Math.hypot(vw,vh);
+ tracks.forEach(t=>{const dt=(now-t.t)/1000;t.px=t.x+t.vx*dt;t.py=t.y+t.vy*dt});
+ const pairs=[];
+ dets.forEach((d,i)=>tracks.forEach((t,j)=>{
+  const dist=Math.hypot(d.x-t.px,d.y-t.py),lim=Math.max(d.w,d.h,t.w,t.h)*0.9+diag*0.03;
+  if(dist<lim)pairs.push([dist,i,j])}));
+ pairs.sort((a,b)=>a[0]-b[0]);
+ const du=new Set(),tu=new Set();
+ for(const [,i,j] of pairs){
+  if(du.has(i)||tu.has(j))continue;du.add(i);tu.add(j);
+  const d=dets[i],t=tracks[j],dt=Math.max(.03,(now-t.t)/1000);
+  t.vx=.6*t.vx+.4*(d.x-t.x)/dt;t.vy=.6*t.vy+.4*(d.y-t.y)/dt;
+  t.x=d.x;t.y=d.y;t.w=d.w;t.h=d.h;t.t=now;t.hits++;cross(t);
+ }
+ dets.forEach((d,i)=>{if(du.has(i))return;
+  const t={id:nextId++,x:d.x,y:d.y,w:d.w,h:d.h,vx:0,vy:0,px:d.x,py:d.y,t:now,hits:1,side:0,flash:0};
+  t.side=sideOf(t,0);tracks.push(t)});
+ tracks=tracks.filter(t=>now-t.t<MAX_AGE);
+}
+function draw(now){
+ oc.clearRect(0,0,vw,vh);
+ const u=vw/320,h=$('orient').value==='h',L=Number($('line').value)/100;
+ oc.lineWidth=2*u;oc.strokeStyle='#ffcb3d';oc.setLineDash([8*u,6*u]);
+ oc.beginPath();
+ if(h){oc.moveTo(0,L*vh);oc.lineTo(vw,L*vh)}else{oc.moveTo(L*vw,0);oc.lineTo(L*vw,vh)}
+ oc.stroke();oc.setLineDash([]);
+ oc.font=`${11*u}px system-ui,sans-serif`;
+ tracks.forEach(t=>{
+  if(now-t.t>250)return;
+  const on=t.flash>now;
+  oc.strokeStyle=on?(t.dirIn?'#35e0a1':'#ff9a6b'):'#ffffff';
+  oc.lineWidth=(on?3:1.5)*u;
+  oc.strokeRect(t.x-t.w/2,t.y-t.h/2,t.w,t.h);
+  oc.fillStyle=oc.strokeStyle;oc.fillText('#'+t.id,t.x-t.w/2+3*u,t.y-t.h/2+12*u);
+ });
+}
+async function loop(){
+ if(!mon)return;
+ if(!busy&&video.readyState>=2){
+  busy=true;
+  try{
+   const p=await model.detect(video,30),minS=Number($('conf').value)/100,now=performance.now();
+   const dets=p.filter(o=>o.class==='person'&&o.score>=minS&&o.bbox[2]*o.bbox[3]>vw*vh*0.004)
+    .map(o=>({x:o.bbox[0]+o.bbox[2]/2,y:o.bbox[1]+o.bbox[3]/2,w:o.bbox[2],h:o.bbox[3]}));
+   update(dets,now);draw(now);
+   fpsN++;if(now-fpsT>1000){fps=fpsN;fpsN=0;fpsT=now}
+   status(`Monitorando · ${fps} quadros/s · ${dets.length} pessoa${dets.length===1?'':'s'} na imagem`);
+  }catch(e){}
+  busy=false;
+ }
+ requestAnimationFrame(loop);
+}
+
+/* ---------- câmera ---------- */
+async function camOn(){
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){status('Este navegador não permite usar a câmera aqui. Abra o endereço em HTTPS pelo Chrome.');return}
+ status('Pedindo permissão da câmera…');
+ try{
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:960},height:{ideal:720}},audio:false});
+  video.srcObject=stream;await video.play();
+  vw=video.videoWidth||640;vh=video.videoHeight||480;ov.width=vw;ov.height=vh;
+  $('cam').style.aspectRatio=vw+'/'+vh;$('placeholder').style.display='none';
+  $('btnCam').disabled=true;$('btnMon').disabled=false;$('btnStop').disabled=false;
+  draw(0);status('Câmera ligada. Ajuste a linha e toque em “Iniciar contagem”.');
+ }catch(e){
+  status(e&&e.name==='NotAllowedError'?'Permissão negada. Libere a câmera nas configurações do site e tente de novo.':'Não foi possível abrir a câmera. Feche outros apps que a usam e tente de novo.');
+ }
+}
+async function lock(){try{if('wakeLock' in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}}
+async function monOn(){
+ if(!stream)return;
+ $('btnMon').disabled=true;
+ if(!await loadModel()){$('btnMon').disabled=false;return}
+ tracks=[];mon=true;busy=false;fpsT=performance.now();lock();requestAnimationFrame(loop);
+}
+function stopAll(){
+ mon=false;
+ if(stream)stream.getTracks().forEach(t=>t.stop());
+ stream=null;video.srcObject=null;tracks=[];oc.clearRect(0,0,vw,vh);
+ if(wake){try{wake.release()}catch(e){}wake=null}
+ $('btnCam').disabled=false;$('btnMon').disabled=true;$('btnStop').disabled=true;
+ $('placeholder').style.display='';status('Câmera desligada.');
+}
+
+/* ---------- eventos ---------- */
+$('btnCam').onclick=camOn;$('btnMon').onclick=monOn;$('btnStop').onclick=stopAll;
+$('orient').onchange=()=>{dirOptions();save();if(!mon)draw(0)};
+$('line').oninput=e=>{$('lineV').textContent=e.target.value;save();if(!mon)draw(0)};
+$('conf').oninput=e=>{$('confV').textContent=e.target.value;save()};
+$('dir').onchange=save;
+$('mdl').onchange=()=>{save();if(mon){mon=false;monOn()}};
+$('btnAddIn').onclick=()=>add('in',true);$('btnAddOut').onclick=()=>add('out',true);
+$('btnUndo').onclick=()=>{logs.pop();save();render()};
+$('btnClr').onclick=()=>{if(confirm('Apagar todas as contagens e o histórico deste aparelho?')){logs=[];save();render()}};
+$('btnExp').onclick=()=>{
+ const rows=[['Data e hora','Evento'],...logs.map(l=>[fmt(l.ts),l.t==='in'?'Entrada':'Saída'])];
+ const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(';')).join('\r\n');
+ const u=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');
+ a.href=u;a.download='passagens.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&mon)lock()});
+dirOptions();try{const s=JSON.parse(localStorage.getItem(KEY)||'{}');if(s.cfg&&s.cfg.dir)$('dir').value=s.cfg.dir}catch(e){}
+$('lineV').textContent=$('line').value;$('confV').textContent=$('conf').value;
+render();
+})();
+</script>
+</body>
+</html>
