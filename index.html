@@ -42,7 +42,7 @@ th{color:var(--muted);font-weight:600}
 <body>
 <main>
   <h1>Contador de passagem</h1>
-  <p class="sub">Detecta cada pessoa na imagem, acompanha o trajeto de cada uma e conta quando ela cruza a linha amarela. Várias pessoas ao mesmo tempo são contadas separadamente.</p>
+  <p class="sub">Toda vez que uma pessoa cruza a linha amarela, o app registra uma entrada ou uma saída, conforme o sentido.</p>
 
   <section class="card">
     <div class="cam" id="cam">
@@ -56,7 +56,7 @@ th{color:var(--muted);font-weight:600}
       <button id="btnMon" disabled>Iniciar contagem</button>
       <button id="btnStop" disabled>Parar</button>
     </div>
-    <p class="note">Posicionamento ideal: celular fixo no alto, olhando a porta de cima para baixo ou em diagonal, com a linha amarela no meio da passagem. Pessoas de frente para a câmera, sem ficar uma atrás da outra, são contadas com mais precisão.</p>
+    <p class="note">Coloque o celular fixo, de preferência no alto, e posicione a linha amarela no meio da passagem. Durante a contagem, cada pessoa detectada aparece dentro de uma caixa numerada.</p>
   </section>
 
   <section class="card">
@@ -69,11 +69,16 @@ th{color:var(--muted);font-weight:600}
       <button id="btnAddIn">+1 entrada</button>
       <button id="btnAddOut">+1 saída</button>
     </div>
-    <p class="note" style="margin:10px 0 0">Use os botões +1 para corrigir se notar uma falha. Os dados ficam salvos neste aparelho.</p>
   </section>
 
   <section class="card">
     <h2>Ajustes</h2>
+    <label for="eng">Detector</label>
+    <select id="eng">
+      <option value="auto">Automático (usa IA e, se falhar, movimento)</option>
+      <option value="motion">Somente movimento (não precisa de internet)</option>
+      <option value="ai">Somente IA de pessoas</option>
+    </select>
     <label for="orient">Direção da linha de contagem</label>
     <select id="orient">
       <option value="h">Linha horizontal (pessoas passam de cima para baixo na imagem)</option>
@@ -83,13 +88,17 @@ th{color:var(--muted);font-weight:600}
     <input id="line" type="range" min="15" max="85" value="50">
     <label for="dir">Conta como entrada quando a pessoa cruza…</label>
     <select id="dir"></select>
-    <label for="mdl">Modelo de detecção</label>
+    <label for="sens">Sensibilidade ao movimento: <strong id="sensV">18</strong> (menor detecta mais)</label>
+    <input id="sens" type="range" min="6" max="50" value="18">
+    <label for="minA">Tamanho mínimo de uma pessoa: <strong id="minAV">1</strong>% da imagem (menor detecta pessoas mais longe)</label>
+    <input id="minA" type="range" min="0.2" max="10" step="0.2" value="1">
+    <label for="conf">Confiança mínima da IA: <strong id="confV">50</strong>%</label>
+    <input id="conf" type="range" min="50" max="90" value="50">
+    <label for="mdl">Modelo da IA</label>
     <select id="mdl">
-      <option value="mobilenet_v2">Preciso (mais lento, melhor com grupos)</option>
-      <option value="lite_mobilenet_v2">Rápido (para celulares mais fracos)</option>
+      <option value="lite_mobilenet_v2">Rápido</option>
+      <option value="mobilenet_v2">Preciso (mais lento)</option>
     </select>
-    <label for="conf">Confiança mínima: <strong id="confV">55</strong>% (maior evita falsos positivos)</label>
-    <input id="conf" type="range" min="50" max="90" value="55">
   </section>
 
   <section class="card">
@@ -104,7 +113,7 @@ th{color:var(--muted);font-weight:600}
     </div>
   </section>
 
-  <p class="note">Privacidade: a análise roda no próprio aparelho. Nenhuma imagem é salva ou enviada, e o app não identifica rostos. A internet é usada apenas para baixar o detector na primeira vez.</p>
+  <p class="note">Privacidade: a análise roda no próprio aparelho. Nenhuma imagem é salva ou enviada, e o app não identifica rostos.</p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
@@ -112,19 +121,21 @@ th{color:var(--muted);font-weight:600}
 (()=>{
 const $=id=>document.getElementById(id);
 const video=$('video'),ov=$('ov'),oc=ov.getContext('2d');
-const KEY='contador_passagem_v2',CFG=['orient','line','dir','mdl','conf'];
-let model=null,modelKind='',stream=null,mon=false,busy=false,wake=null;
-let tracks=[],nextId=1,logs=[],vw=640,vh=480,fpsN=0,fpsT=0,fps=0;
-const MAX_AGE=1000;
+const KEY='contador_passagem_v3',CFG=['eng','orient','line','dir','sens','minA','conf','mdl'];
+let model=null,modelKind='',stream=null,mon=false,busy=false,wake=null,engine='motion';
+let tracks=[],nextId=1,logs=[],vw=640,vh=480,fpsN=0,fpsT=0,fps=0,lastM=0,hist=[];
+const MAX_AGE=1200,MW=80,MH=60;
+const mc=document.createElement('canvas');mc.width=MW;mc.height=MH;
+const mctx=mc.getContext('2d',{willReadFrequently:true});
 
 try{const s=JSON.parse(localStorage.getItem(KEY)||'{}');logs=Array.isArray(s.logs)?s.logs:[];
- s.cfg&&Object.keys(s.cfg).forEach(k=>{if(CFG.includes(k)&&$(k))$(k).value=s.cfg[k]})}catch(e){}
+ s.cfg&&Object.keys(s.cfg).forEach(k=>{if(CFG.includes(k)&&$(k)&&k!=='dir')$(k).value=s.cfg[k]})}catch(e){}
 function save(){try{const cfg={};CFG.forEach(k=>cfg[k]=$(k).value);localStorage.setItem(KEY,JSON.stringify({logs:logs.slice(-5000),cfg}))}catch(e){}}
 function status(t){$('status').textContent=t}
 function fmt(ts){return new Date(ts).toLocaleString('pt-BR')}
 
-function dirOptions(){
- const h=$('orient').value==='h',cur=$('dir').value||'pos';
+function dirOptions(saved){
+ const h=$('orient').value==='h',cur=saved||$('dir').value||'pos';
  $('dir').innerHTML='';
  [['pos',h?'a linha de cima para baixo':'a linha da esquerda para a direita'],['neg',h?'a linha de baixo para cima':'a linha da direita para a esquerda']]
   .forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;$('dir').appendChild(o)});
@@ -146,23 +157,65 @@ function add(t,manual){
  if(!manual&&navigator.vibrate)try{navigator.vibrate(30)}catch(e){}
 }
 
+/* ---------- detector de IA ---------- */
 async function loadModel(){
  const kind=$('mdl').value;
  if(model&&modelKind===kind)return true;
- if(!window.cocoSsd){status('Não foi possível carregar o detector. Conecte-se à internet e recarregue a página.');return false}
- status('Carregando detector de pessoas… (apenas na primeira vez)');
- try{model=await cocoSsd.load({base:kind});modelKind=kind;return true}
- catch(e){status('Falha ao baixar o modelo. Verifique a internet e tente de novo.');return false}
+ if(!window.cocoSsd||!window.tf){status('Detector de IA indisponível (sem internet?).');return false}
+ status('Carregando detector de pessoas…');
+ try{
+  try{await tf.setBackend('webgl');await tf.ready()}catch(e){await tf.setBackend('cpu');await tf.ready()}
+  model=await Promise.race([cocoSsd.load({base:kind}),new Promise((_,r)=>setTimeout(()=>r(new Error('tempo esgotado')),30000))]);
+  await model.detect(video,3);modelKind=kind;return true;
+ }catch(e){model=null;status('IA indisponível ('+(e.message||e)+').');return false}
+}
+async function aiDets(){
+ const p=await model.detect(video,30),minS=Number($('conf').value)/100,minArea=vw*vh*Number($('minA').value)/100;
+ return p.filter(o=>o.class==='person'&&o.score>=minS&&o.bbox[2]*o.bbox[3]>=minArea)
+  .map(o=>({x:o.bbox[0]+o.bbox[2]/2,y:o.bbox[1]+o.bbox[3]/2,w:o.bbox[2],h:o.bbox[3]}));
+}
+
+/* ---------- detector por movimento ---------- */
+function dilate(m){
+ const o=new Uint8Array(m.length);
+ for(let y=1;y<MH-1;y++)for(let x=1;x<MW-1;x++){const p=y*MW+x;if(m[p]||m[p-1]||m[p+1]||m[p-MW]||m[p+MW])o[p]=1}
+ return o;
+}
+function motionDets(){
+ mctx.drawImage(video,0,0,MW,MH);
+ const d=mctx.getImageData(0,0,MW,MH).data,g=new Uint8Array(MW*MH);
+ for(let i=0,p=0;i<d.length;i+=4,p++)g[p]=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)|0;
+ hist.push(g);if(hist.length>3)hist.shift();
+ if(hist.length<3)return [];
+ const ref=hist[0],th=Number($('sens').value);
+ let m=new Uint8Array(MW*MH);
+ for(let p=0;p<m.length;p++)m[p]=Math.abs(g[p]-ref[p])>th?1:0;
+ m=dilate(dilate(m));
+ const seen=new Uint8Array(MW*MH),out=[],minCells=MW*MH*Number($('minA').value)/100,sx=vw/MW,sy=vh/MH;
+ for(let s=0;s<m.length;s++){
+  if(!m[s]||seen[s])continue;
+  const st=[s];seen[s]=1;let n=0,x0=MW,x1=0,y0=MH,y1=0;
+  while(st.length){
+   const p=st.pop(),x=p%MW,y=(p/MW)|0;n++;
+   if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+   [p-1,p+1,p-MW,p+MW].forEach(q=>{if(q>=0&&q<m.length&&m[q]&&!seen[q]&&Math.abs((q%MW)-x)<=1){seen[q]=1;st.push(q)}});
+  }
+  if(n<minCells)continue;
+  const w=(x1-x0+1)*sx,h=(y1-y0+1)*sy,cy=(y0+(y1-y0+1)/2)*sy;
+  const k=w/h>1.4?Math.min(3,Math.round(w/(h*.6))):1;
+  for(let i=0;i<Math.max(1,k);i++)out.push({x:(x0*sx)+w/Math.max(1,k)*(i+.5),y:cy,w:w/Math.max(1,k),h});
+ }
+ return out;
 }
 
 /* ---------- rastreamento e contagem ---------- */
 function posOf(t){return $('orient').value==='h'?t.y/vh:t.x/vw}
-function sideOf(t,prev){const s=posOf(t)-Number($('line').value)/100,m=0.02;return s>m?1:s<-m?-1:prev}
+function sideOf(t,prev){const s=posOf(t)-Number($('line').value)/100,m=0.012;return s>m?1:s<-m?-1:prev}
 function cross(t){
  const s=sideOf(t,t.side);
- if(t.side!==0&&s!==0&&s!==t.side&&t.hits>=3){
+ if(t.side!==0&&s!==0&&s!==t.side&&t.hits>=2){
   const entry=(s===1)===($('dir').value==='pos');
-  add(entry?'in':'out');t.flash=performance.now()+700;t.dirIn=entry;
+  add(entry?'in':'out');t.flash=performance.now()+800;t.dirIn=entry;
  }
  t.side=s;
 }
@@ -171,7 +224,7 @@ function update(dets,now){
  tracks.forEach(t=>{const dt=(now-t.t)/1000;t.px=t.x+t.vx*dt;t.py=t.y+t.vy*dt});
  const pairs=[];
  dets.forEach((d,i)=>tracks.forEach((t,j)=>{
-  const dist=Math.hypot(d.x-t.px,d.y-t.py),lim=Math.max(d.w,d.h,t.w,t.h)*0.9+diag*0.03;
+  const dist=Math.hypot(d.x-t.px,d.y-t.py),lim=Math.max(d.w,d.h,t.w,t.h)*0.9+diag*0.04;
   if(dist<lim)pairs.push([dist,i,j])}));
  pairs.sort((a,b)=>a[0]-b[0]);
  const du=new Set(),tu=new Set();
@@ -189,32 +242,34 @@ function update(dets,now){
 function draw(now){
  oc.clearRect(0,0,vw,vh);
  const u=vw/320,h=$('orient').value==='h',L=Number($('line').value)/100;
- oc.lineWidth=2*u;oc.strokeStyle='#ffcb3d';oc.setLineDash([8*u,6*u]);
+ oc.lineWidth=2.5*u;oc.strokeStyle='#ffcb3d';oc.setLineDash([8*u,6*u]);
  oc.beginPath();
  if(h){oc.moveTo(0,L*vh);oc.lineTo(vw,L*vh)}else{oc.moveTo(L*vw,0);oc.lineTo(L*vw,vh)}
  oc.stroke();oc.setLineDash([]);
  oc.font=`${11*u}px system-ui,sans-serif`;
  tracks.forEach(t=>{
-  if(now-t.t>250)return;
+  if(now-t.t>300)return;
   const on=t.flash>now;
   oc.strokeStyle=on?(t.dirIn?'#35e0a1':'#ff9a6b'):'#ffffff';
-  oc.lineWidth=(on?3:1.5)*u;
+  oc.lineWidth=(on?3.5:1.5)*u;
   oc.strokeRect(t.x-t.w/2,t.y-t.h/2,t.w,t.h);
   oc.fillStyle=oc.strokeStyle;oc.fillText('#'+t.id,t.x-t.w/2+3*u,t.y-t.h/2+12*u);
  });
 }
 async function loop(){
  if(!mon)return;
- if(!busy&&video.readyState>=2){
-  busy=true;
+ const now=performance.now();
+ if(!busy&&video.readyState>=2&&(engine==='ai'||now-lastM>=66)){
+  busy=true;lastM=now;
   try{
-   const p=await model.detect(video,30),minS=Number($('conf').value)/100,now=performance.now();
-   const dets=p.filter(o=>o.class==='person'&&o.score>=minS&&o.bbox[2]*o.bbox[3]>vw*vh*0.004)
-    .map(o=>({x:o.bbox[0]+o.bbox[2]/2,y:o.bbox[1]+o.bbox[3]/2,w:o.bbox[2],h:o.bbox[3]}));
+   const dets=engine==='ai'?await aiDets():motionDets();
    update(dets,now);draw(now);
    fpsN++;if(now-fpsT>1000){fps=fpsN;fpsN=0;fpsT=now}
-   status(`Monitorando · ${fps} quadros/s · ${dets.length} pessoa${dets.length===1?'':'s'} na imagem`);
-  }catch(e){}
+   status(`${engine==='ai'?'IA de pessoas':'Detecção por movimento'} · ${fps} quadros/s · ${dets.length} na imagem`);
+  }catch(e){
+   if(engine==='ai'&&$('eng').value==='auto'){engine='motion';hist=[];tracks=[];status('A IA falhou; usando detecção por movimento.')}
+   else status('Erro: '+(e.message||e));
+  }
   busy=false;
  }
  requestAnimationFrame(loop);
@@ -238,9 +293,13 @@ async function camOn(){
 async function lock(){try{if('wakeLock' in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}}
 async function monOn(){
  if(!stream)return;
- $('btnMon').disabled=true;
- if(!await loadModel()){$('btnMon').disabled=false;return}
- tracks=[];mon=true;busy=false;fpsT=performance.now();lock();requestAnimationFrame(loop);
+ $('btnMon').disabled=true;tracks=[];hist=[];mon=false;
+ const pref=$('eng').value;engine='motion';
+ if(pref!=='motion'){
+  if(await loadModel())engine='ai';
+  else if(pref==='ai'){$('btnMon').disabled=false;return}
+ }
+ mon=true;busy=false;fpsT=performance.now();lock();requestAnimationFrame(loop);
 }
 function stopAll(){
  mon=false;
@@ -255,9 +314,10 @@ function stopAll(){
 $('btnCam').onclick=camOn;$('btnMon').onclick=monOn;$('btnStop').onclick=stopAll;
 $('orient').onchange=()=>{dirOptions();save();if(!mon)draw(0)};
 $('line').oninput=e=>{$('lineV').textContent=e.target.value;save();if(!mon)draw(0)};
+$('sens').oninput=e=>{$('sensV').textContent=e.target.value;save()};
+$('minA').oninput=e=>{$('minAV').textContent=e.target.value;save()};
 $('conf').oninput=e=>{$('confV').textContent=e.target.value;save()};
-$('dir').onchange=save;
-$('mdl').onchange=()=>{save();if(mon){mon=false;monOn()}};
+['dir','eng','mdl'].forEach(k=>$(k).onchange=()=>{save();if(mon&&k!=='dir'){mon=false;monOn()}});
 $('btnAddIn').onclick=()=>add('in',true);$('btnAddOut').onclick=()=>add('out',true);
 $('btnUndo').onclick=()=>{logs.pop();save();render()};
 $('btnClr').onclick=()=>{if(confirm('Apagar todas as contagens e o histórico deste aparelho?')){logs=[];save();render()}};
@@ -268,8 +328,9 @@ $('btnExp').onclick=()=>{
  a.href=u;a.download='passagens.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
 };
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&mon)lock()});
-dirOptions();try{const s=JSON.parse(localStorage.getItem(KEY)||'{}');if(s.cfg&&s.cfg.dir)$('dir').value=s.cfg.dir}catch(e){}
-$('lineV').textContent=$('line').value;$('confV').textContent=$('conf').value;
+let savedDir;try{savedDir=(JSON.parse(localStorage.getItem(KEY)||'{}').cfg||{}).dir}catch(e){}
+dirOptions(savedDir);
+['line','sens','minA','conf'].forEach(k=>$(k+'V').textContent=$(k).value);
 render();
 })();
 </script>
